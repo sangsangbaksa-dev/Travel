@@ -3,23 +3,32 @@ import { Cube } from './cube/cube';
 import { Input } from './input/input';
 import { FixedStepper } from './physics/clock';
 import { HALF, PhysicsWorld, type PhysicsInput } from './physics/world';
+import { sampleSky } from './sky/cycle';
+import { Sky } from './sky/sky';
 import { createTerrain, surfaceNormal } from './terrain/height';
 import { TerrainMesh } from './terrain/mesh';
 
 const app = document.getElementById('app')!;
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setClearColor(0x000000, 0);
 app.appendChild(renderer.domElement);
 
-const FOG = new THREE.Color('#dff1ff');
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(FOG, 30, 92);
+scene.fog = new THREE.Fog('#dff1ff', 30, 92);
+const sky = new Sky(scene);
 
-scene.add(new THREE.HemisphereLight('#fff6ec', '#a8c8a0', 1.7));
-const sun = new THREE.DirectionalLight('#fff0d8', 1.2);
-sun.position.set(40, 60, 25);
-scene.add(sun);
+// 낮밤: 하루 = 4분. 빨리감기를 켜면 20배.
+const DAY_SECONDS = 240;
+const FAST = 20;
+let timeOfDay = 0.3;
+let fast = false;
+const timeBtn = document.getElementById('timeBtn')!;
+const toggleFast = () => {
+  fast = !fast;
+  timeBtn.classList.toggle('on', fast);
+};
+timeBtn.addEventListener('click', toggleFast);
+addEventListener('keydown', (e) => { if (e.code === 'KeyT' && !e.repeat) toggleFast(); });
 
 const terrain = createTerrain(1337);
 const terrainMesh = new TerrainMesh(terrain);
@@ -32,7 +41,7 @@ scene.add(cube.group, cube.shadow);
 const input = new Input(renderer.domElement, app);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
 let camYaw = 0.6;
-let camPitch = 0.42;
+let camPitch = 0.26;
 const CAM_DIST = 7.5;
 const camTarget = new THREE.Vector3();
 
@@ -94,6 +103,7 @@ function frame(now: number) {
   surfaceNormal(terrain, pos.x, pos.z, nTmp);
   normal.set(nTmp.x, nTmp.y, nTmp.z);
 
+  timeOfDay = (timeOfDay + (dt / DAY_SECONDS) * (fast ? FAST : 1)) % 1;
   terrainMesh.update(pos.x, pos.z);
   cube.update(dt, pos, s.vy, s.grounded, groundY, faceX, faceZ, normal);
 
@@ -111,8 +121,9 @@ function frame(now: number) {
   );
   const minY = terrain.height(camera.position.x, camera.position.z) + 1;
   if (camera.position.y < minY) camera.position.y = minY;
-  camera.lookAt(camTarget.x, camTarget.y + 0.4, camTarget.z);
+  camera.lookAt(camTarget.x, camTarget.y + 1.1, camTarget.z);
 
+  sky.update(camera, sampleSky(timeOfDay));
   renderer.render(scene, camera);
   fpsCount++;
 }
@@ -123,5 +134,6 @@ requestAnimationFrame(frame);
 
 // 검증/디버깅용 훅
 (window as unknown as Record<string, unknown>).__cube = {
-  state: () => ({ ...physics.state, half: HALF, frames: fpsCount }),
+  state: () => ({ ...physics.state, half: HALF, frames: fpsCount, timeOfDay }),
+  setTime: (t: number) => { timeOfDay = t; },
 };

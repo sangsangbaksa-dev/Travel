@@ -7,19 +7,26 @@
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
     body {
-      background: linear-gradient(#8fd0ff 0%, #bfe6ff 38%, #dff1ff 52%, #dff1ff 100%);
+      background: #dff1ff;
       font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
       -webkit-user-select: none; user-select: none; touch-action: none;
     }
     #app { position: fixed; inset: 0; }
     canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     .hint {
-      position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+      position: fixed; left: 50%; top: max(52px, calc(env(safe-area-inset-top) + 48px)); transform: translateX(-50%);
       padding: 7px 14px; border-radius: 999px; background: rgba(255,255,255,.7);
       color: #5b4a6e; font-size: 13px; backdrop-filter: blur(6px); pointer-events: none;
       transition: opacity 1s; white-space: nowrap;
     }
     .hint.hide { opacity: 0; }
+    .timebtn {
+      position: fixed; right: max(14px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top));
+      padding: 7px 14px; border-radius: 999px; border: 0; cursor: pointer;
+      background: rgba(255,255,255,.7); color: #5b4a6e; font: inherit; font-size: 13px;
+      backdrop-filter: blur(6px);
+    }
+    .timebtn.on { background: #ff9eb5; color: #fff; }
     .stick {
       position: fixed; left: max(24px, env(safe-area-inset-left)); bottom: max(28px, env(safe-area-inset-bottom));
       width: 120px; height: 120px; border-radius: 50%;
@@ -39,6 +46,7 @@
 <body>
   <div id="app"></div>
   <div class="hint" id="hint"></div>
+  <button class="timebtn" id="timeBtn" type="button">시간 빨리감기 (T)</button>
   <script type="module" src="/src/hud.ts"></script>
   <script type="module" src="/src/main.ts"></script>
 </body>

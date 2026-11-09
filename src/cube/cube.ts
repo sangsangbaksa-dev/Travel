@@ -12,7 +12,7 @@ export class Cube {
   private yaw = 0;
 
   constructor() {
-    const mat = new THREE.MeshLambertMaterial({ color: '#ff9eb5' });
+    const mat = new THREE.MeshLambertMaterial({ color: '#ff9eb5', emissive: '#ff7d9f', emissiveIntensity: 0.22 });
     const body = new THREE.Mesh(new RoundedBoxGeometry(HALF * 2, HALF * 2, HALF * 2, 5, 0.16), mat);
     body.castShadow = false;
 
