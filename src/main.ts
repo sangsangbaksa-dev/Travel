@@ -16,7 +16,8 @@ import { CreatureField } from './world/creatures';
 import { FishSchools } from './world/fish';
 import { DeepSea } from './world/deepSea';
 import { Residents } from './world/residents';
-import { Realms } from './world/realms';
+import { createPassageTerrain, passageZone, Passages, type Realm } from './world/passages';
+import { createVolcanicTerrain, Volcano, VOLCANO } from './world/volcano';
 import { RealmCreatures } from './world/realmCreatures';
 import { Minimap } from './world/minimap';
 import { Settlements } from './world/settlements';
@@ -26,7 +27,6 @@ import { Water } from './world/water';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
-const realmFade = document.getElementById('realmFade')!;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 let pixelRatio = Math.min(devicePixelRatio, 2);
 renderer.setPixelRatio(pixelRatio);
@@ -38,7 +38,7 @@ const sky = new Sky(scene);
 const clouds = new Clouds();
 scene.add(clouds.mesh);
 
-const terrain = createTerrain(1337);
+const terrain = createPassageTerrain(createVolcanicTerrain(createTerrain(1337)));
 const waterLevel = terrain.waterLevel ?? -Infinity;
 const objects = new ObjectCache(terrain);
 const chunks = new ChunkManager(terrain, objects);
@@ -47,7 +47,10 @@ scene.add(chunks.group);
 const water = new Water(waterLevel);
 scene.add(water.mesh);
 
-const realms = new Realms(scene, terrain);
+const realms: { terrain: typeof terrain; mode: Realm } = { terrain, mode: 'surface' };
+scene.add(new Passages(terrain).group);
+const volcano = new Volcano();
+scene.add(volcano.group);
 const realmCreatures = new RealmCreatures(realms.terrain);
 const creatures = new CreatureField(terrain);
 const fish = new FishSchools(terrain);
@@ -135,7 +138,8 @@ const DEEP_WATER_COLOR = new THREE.Color('#244858');
 /** 지금 서 있는 곳의 이름 */
 function placeAt(x: number, z: number, y: number, inWater: boolean): string {
   if (realms.mode === 'cave') return '지하 동굴';
-  if (realms.mode === 'sky') return '고산 지대';
+  if (realms.mode === 'sky') return '구름 위 전망대';
+  if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < 105 && !inWater) return '화산';
   const settlement = settlementNameAt(x, z);
   if (settlement) return settlement;
   if (inWater) return terrainInfo(x, z, 1337).landness < 0.6 ? '바다' : '강·호수';
@@ -190,17 +194,8 @@ function frame(now: number) {
     landImpact = Math.max(landImpact, physics.state.landImpact);
   }
   const s = physics.state;
-  const realmChange = started ? realms.update(s, chunks.group, water.mesh) : null;
-  if (realmChange) {
-    camTarget.set(s.x, s.y, s.z);
-    creatures.group.visible = residents.group.visible = settlements.group.visible = realms.mode === 'surface';
-    hud.toast(`${realmChange}에 도착했어요`, 2400);
-    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      realmFade.getAnimations().forEach(animation => animation.cancel());
-      realmFade.animate([{ opacity: 0.8 }, { opacity: 0 }], { duration: 450, easing: 'ease-out' });
-    }
-    placeT = 0;
-  }
+  realms.mode = passageZone(s.x, s.z);
+  creatures.group.visible = residents.group.visible = realms.mode === 'surface';
   minimap.update(s.x, s.z, faceX, faceZ, dt, started && realms.mode === 'surface');
   fish.update(s.x, s.z, time, dt, started && realms.mode === 'surface' && s.submerged);
   deepSea.update(s.x, s.z, started && realms.mode === 'surface' && s.submerged);
@@ -261,8 +256,9 @@ function frame(now: number) {
   if (s.inWater && !s.submerged) pos.y += Math.sin(now / 380) * 0.04; // 물 위에서 살짝 출렁
 
   timeOfDay = (timeOfDay + (dt / DAY_SECONDS) * (fast ? FAST : 1)) % 1;
+  chunks.update(pos.x, pos.z);
+  volcano.update(time);
   if (realms.mode === 'surface') {
-    chunks.update(pos.x, pos.z);
     creatures.update(pos.x, pos.z, time);
     residents.update(time);
     settlements.update(pos.x, pos.z);
@@ -284,13 +280,15 @@ function frame(now: number) {
     camTarget.y + (s.submerged ? 0.35 : 1.2) + Math.sin(camPitch) * (s.submerged ? 0.5 : CAM_DIST),
     camTarget.z + Math.cos(camYaw) * cp * cameraDistance,
   );
+  if (realms.mode === 'cave') camera.position.x = THREE.MathUtils.clamp(camera.position.x, -13, -7);
   if (s.submerged && realms.terrain.height(camera.position.x, camera.position.z) + 0.5 >= waterLevel) {
     camera.position.x = pos.x;
     camera.position.z = pos.z;
   }
   const cameraFloor = realms.terrain.height(camera.position.x, camera.position.z);
-  const minY = s.submerged ? cameraFloor + 0.25 : Math.max(cameraFloor, realms.terrain.waterLevel ?? -Infinity) + 1;
+  const minY = s.submerged ? cameraFloor + 0.25 : Math.max(cameraFloor, realms.terrain.waterAt?.(camera.position.x, camera.position.z) ?? realms.terrain.waterLevel ?? -Infinity) + 1;
   if (camera.position.y < minY) camera.position.y = minY;
+  if (realms.mode === 'cave') camera.position.y = Math.min(camera.position.y, terrain.height(camera.position.x, camera.position.z) + 3.8);
   if (s.submerged && minY < waterLevel - 0.1) camera.position.y = Math.min(camera.position.y, waterLevel - 0.1);
   camera.lookAt(camTarget.x, camTarget.y + (s.submerged ? 0.2 : 1.1), camTarget.z);
 

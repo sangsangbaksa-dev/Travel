@@ -52,8 +52,8 @@ export class Settlements {
       const direction = new THREE.Vector3(sign.target.x - sign.x, 0, sign.target.z - sign.z).normalize();
       this.group.add(new THREE.ArrowHelper(direction, new THREE.Vector3(sign.x, y + .2, sign.z), 2.8, sign.color, .9, .55));
     }
-    for (const sign of [{x:-5, title:'지하 동굴 입구', color:'#579c98'}, {x:5, title:'하늘 계단', color:'#b583b6'}]) {
-      const z = -2.2, y = height(sign.x, z);
+    for (const sign of [{x:-10, title:'지하로 내려가는 길', color:'#579c98'}, {x:12, title:'천국으로 가는 계단', color:'#b583b6'}]) {
+      const z = 2, y = height(sign.x, z);
       const name = label(sign.title, sign.color); name.position.set(sign.x, y + 2.7, z); this.group.add(name);
     }
     SETTLEMENTS.forEach((place, style) => {

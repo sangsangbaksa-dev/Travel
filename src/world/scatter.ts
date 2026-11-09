@@ -1,4 +1,5 @@
 import { BUILDING_OFFSETS, CITY_BUILDING_OFFSETS, inSettlement, SETTLEMENTS } from './settlement-layout';
+import { inPassage } from './passages';
 import { biomeWeights, dominantBiome, type Climate } from '../terrain/biome';
 import { noise2, surfaceNormal, type Terrain } from '../terrain/height';
 
@@ -101,7 +102,7 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
     const variantRoll = rnd();
     const accept = rnd();
 
-    if (Math.hypot(x, z) < SPAWN_CLEAR || inSettlement(x, z)) continue;
+    if (Math.hypot(x, z) < SPAWN_CLEAR || inSettlement(x, z) || inPassage(x, z)) continue;
     const y = t.height(x, z);
     if (y < water + 0.8) continue;
     surfaceNormal(t, x, z, n);

@@ -11,6 +11,7 @@ export interface Terrain {
   height(x: number, z: number): number;
   /** 수면 높이. 없으면 물이 없는 지형 */
   waterLevel?: number;
+  waterAt?(x: number, z: number): number;
   /** 기후. 없으면 초원으로 취급한다 */
   climate?(x: number, z: number): Climate;
 }
@@ -60,7 +61,7 @@ export function terrainInfo(x: number, z: number, seed = 1337): TerrainInfo {
   const mm = noise2(x * 0.0042, z * 0.0042, seed + 30);
   const mountain = smooth(0.1, 0.5, mm) * smooth(-0.05, 0.3, cont) * smooth(30, 120, d);
   const ridge = clamp01(1 - Math.abs(noise2(x * 0.011, z * 0.011, seed + 31) * 1.4));
-  const peaks = mountain * (ridge * ridge * 44 + 4);
+  const peaks = mountain * (ridge * ridge * 75 + 4);
 
   const floor = OCEAN_FLOOR + noise2(x * 0.02, z * 0.02, seed + 23) * 3;
   const land = rolling + peaks + 3.4;

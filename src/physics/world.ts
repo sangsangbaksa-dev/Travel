@@ -122,7 +122,7 @@ export class PhysicsWorld {
         }
       }
     }
-    const surface = (this.terrain.waterLevel ?? -Infinity) - FLOAT_DEPTH;
+    const surface = (this.terrain.waterAt?.(x, z) ?? this.terrain.waterLevel ?? -Infinity) - FLOAT_DEPTH;
     this.sampledWater = surface > g;
     return this.sampledWater && !underWater ? surface : g;
   }
@@ -155,7 +155,7 @@ export class PhysicsWorld {
     }
 
     // 잠수 중에는 수면을 바닥으로 취급하지 않고 수영 속도로 수직 이동한다.
-    const floatY = (this.terrain.waterLevel ?? -Infinity) - FLOAT_DEPTH + HALF;
+    const floatY = (this.terrain.waterAt?.(s.x, s.z) ?? this.terrain.waterLevel ?? -Infinity) - FLOAT_DEPTH + HALF;
     if ((input.diveHeld && s.inWater && s.y <= floatY + 0.1) || s.submerged) {
       s.submerged = true;
       s.buffer = s.coyote = 0;

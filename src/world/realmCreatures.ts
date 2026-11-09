@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Terrain } from '../terrain/height';
 import { CHUNK, mulberry32 } from './scatter';
-import type { Realm } from './realms';
+import type { Realm } from './passages';
 
 const orb = new THREE.SphereGeometry(1, 10, 7);
 const caveBody = new THREE.MeshLambertMaterial({ color: '#9b90b8' });

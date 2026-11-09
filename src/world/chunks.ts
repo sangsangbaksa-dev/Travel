@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { BIOMES, biomeWeights } from '../terrain/biome';
 import type { Terrain } from '../terrain/height';
 import { CHUNK, ObjectCache, VARIANT, VARIANT_COUNT, type WorldObj } from './scatter';
+import { isCave } from './passages';
+import { VOLCANO } from './volcano';
 
 // 플레이어 주변 청크를 불러오고 멀어지면 내려놓는다. 지형은 높이 함수를 격자로 샘플링해서 만들고,
 // 가장자리 법선은 이웃 청크와 같은 값이 나오도록 한 칸 바깥까지 샘플링한다 (이음새 없음).
@@ -44,6 +46,8 @@ const SNOW = hex('#ffffff');
 const SEA_SHALLOW = hex('#8fdcd2');
 const SEA_DEEP = hex('#3a7fa6');
 const FOAM = hex('#ffffff');
+const CAVE_GROUND = hex('#77736e');
+const VOLCANIC_ROCK = hex('#625b55');
 const ROCK_TINT: RGB[] = [
   [1, 1, 1], [1, 0.96, 1], [1, 0.9, 0.82], [1, 0.8, 0.6], [0.95, 1, 0.95], [0.95, 1, 1], [0.92, 0.88, 1], [0.88, 1, 1],
 ];
@@ -404,6 +408,13 @@ export class ChunkManager {
         // 물가 거품
         const foam = clamp01(1 - Math.abs(y - water) / 0.22) * 0.5;
         if (foam > 0) { tmp[0] = c[0]; tmp[1] = c[1]; tmp[2] = c[2]; lerpC(c, tmp, FOAM, foam); }
+
+        const wx = ox + i * CELL, wz = oz + j * CELL;
+        const volcanic = clamp01((125 - Math.hypot(wx - VOLCANO.x, wz - VOLCANO.z)) / 28) * clamp01((y - water) / 3);
+        if (volcanic > 0 || isCave(wx, wz)) {
+          tmp[0] = c[0]; tmp[1] = c[1]; tmp[2] = c[2];
+          lerpC(c, tmp, isCave(wx, wz) ? CAVE_GROUND : VOLCANIC_ROCK, isCave(wx, wz) ? .9 : volcanic * .85);
+        }
 
         const shade = ((cx * SEG + i + cz * SEG + j) & 1) === 0 ? 1 : 0.972;
         col[o] = c[0] * shade; col[o + 1] = c[1] * shade; col[o + 2] = c[2] * shade;

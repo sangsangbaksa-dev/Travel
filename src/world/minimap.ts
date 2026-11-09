@@ -1,5 +1,6 @@
 import { SETTLEMENTS } from './settlement-layout';
 import type { WreckSite } from './deepSea';
+import { VOLCANO } from './volcano';
 
 /** 북쪽(-Z)이 위인 탐험 지도. 대상이 멀면 가장자리에 방향을 표시한다. */
 export class Minimap {
@@ -36,8 +37,9 @@ export class Minimap {
       { ...SETTLEMENTS[0], label: '꽃', color: '#c27e8b' },
       { ...SETTLEMENTS[1], label: '바', color: '#568899' },
       { ...SETTLEMENTS[2], label: '도', color: '#a78053' },
-      { x: -5, z: -4, label: '굴', color: '#538c86' },
-      { x: 5, z: -4, label: '계', color: '#a27bb1' },
+      { x: -10, z: 0, label: '굴', color: '#538c86' },
+      { x: 12, z: 0, label: '계', color: '#a27bb1' },
+      { ...VOLCANO, label: '화', color: '#b56d4e' },
     ];
     if (this.wreck) points.push({ ...this.wreck, label: '배', color: '#557b8c' });
     for (const point of points) {

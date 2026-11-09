@@ -19,6 +19,7 @@ export class Water {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uTime;\nuniform float uSun;')
+        .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (abs(vWPos.x + 10.0) < 8.0 && vWPos.z < -22.0 && vWPos.z > -145.0) discard;')
         .replace(
           '#include <dithering_fragment>',
           `float s = sin(vWPos.x * 1.7 + uTime * 1.3) * sin(vWPos.z * 1.9 - uTime * 1.1)
