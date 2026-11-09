@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Terrain } from '../terrain/height';
 import { CHUNK, mulberry32 } from './scatter';
-import type { Realm } from './passages';
+import { CAVE, type Realm } from './passages';
 
 const orb = new THREE.SphereGeometry(1, 10, 7);
 const caveBody = new THREE.MeshLambertMaterial({ color: '#9b90b8' });
@@ -92,7 +92,7 @@ export class RealmCreatures {
           creature.groundY = this.terrain.height(x, z);
           creature.nextGroundSample = time + 0.2;
         }
-        creature.group.position.set(x, creature.groundY + (mode === 'cave' ? 3.3 : 2.5) + Math.sin(time * 1.7 + creature.phase) * 0.35, z);
+        creature.group.position.set(x, creature.groundY + (mode === 'cave' ? 2.8 : 2.5) + Math.sin(time * 1.7 + creature.phase) * 0.35, z);
         creature.group.rotation.y = -t;
         creature.wings?.forEach((wing, i) => { wing.rotation.z = (i ? -1 : 1) * Math.sin(time * 9 + creature.phase) * 0.7; });
       }
@@ -104,9 +104,12 @@ export class RealmCreatures {
     if (this.chunks.has(key)) return;
     const rnd = mulberry32(Math.imul(cx, 6736387) ^ Math.imul(cz, 83492791) ^ 1432);
     const creatures: Creature[] = [];
-    for (let i = 0; i < 3; i++) {
-      const x = (cx + 0.15 + rnd() * 0.7) * CHUNK;
+    const inCave = this.mode === 'cave';
+    const count = inCave ? (cx === Math.floor(CAVE.x / CHUNK) ? 2 : 0) : 3;
+    for (let i = 0; i < count; i++) {
+      const x = inCave ? CAVE.x + (rnd() - .5) * 2.4 : (cx + 0.15 + rnd() * 0.7) * CHUNK;
       const z = (cz + 0.15 + rnd() * 0.7) * CHUNK;
+      if (inCave && (z > CAVE.roofFront - 4 || z < -128)) continue;
       const phase = rnd() * Math.PI * 2;
       const creature: Creature = { ...(this.mode === 'cave' ? bat() : skyBird()), x, z, phase, groundY: 0, nextGroundSample: 0 };
       creatures.push(creature);

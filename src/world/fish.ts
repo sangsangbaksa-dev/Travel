@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { Terrain } from '../terrain/height';
+import { waterHeightAt, type Terrain } from '../terrain/height';
 
 const body = new THREE.SphereGeometry(1, 8, 6);
 body.scale(.34, .15, .12);
@@ -38,7 +38,7 @@ export class FishSchools {
         const sz = cz * 12 + 6 + Math.sin(angle) * (7 + hash(cx * 3 + cz * 19 + i + 8) * 7);
         // 물고기의 움직임 범위와 지형 굴곡을 함께 고려한다.
         const floor = Math.max(...[[0,0],[-2,0],[2,0],[0,-2],[0,2]].map(([dx,dz]) => this.terrain.height(sx+dx, sz+dz)));
-        const water = this.terrain.waterLevel ?? -Infinity;
+        const water = waterHeightAt(this.terrain, sx, sz);
         const active = water - floor > 1.5;
         return { x: sx, z: sz, y: active ? floor + Math.min((water - floor) * .45, 3) : 0, active, phase: hash(i + cx * 11 + cz * 23) * Math.PI * 2 };
       });

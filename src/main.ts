@@ -10,14 +10,15 @@ import { Clouds } from './sky/clouds';
 import { sampleSky } from './sky/cycle';
 import { Sky } from './sky/sky';
 import { BIOME_NAMES, BIOMES, dominantBiome } from './terrain/biome';
-import { createTerrain, surfaceNormal, terrainInfo } from './terrain/height';
+import { createTerrain, surfaceNormal, terrainInfo, waterHeightAt } from './terrain/height';
 import { ChunkManager } from './world/chunks';
 import { CreatureField } from './world/creatures';
 import { FishSchools } from './world/fish';
 import { DeepSea } from './world/deepSea';
 import { Residents } from './world/residents';
-import { createPassageTerrain, passageZone, Passages, type Realm } from './world/passages';
+import { CAVE, caveCeilingAt, caveObstacles, createPassageTerrain, isCave, passageZone, Passages, type Realm } from './world/passages';
 import { createVolcanicTerrain, Volcano, VOLCANO } from './world/volcano';
+import { alpineDistance, createAlpineTerrain, makeAlpineLake } from './world/alpineLake';
 import { RealmCreatures } from './world/realmCreatures';
 import { Minimap } from './world/minimap';
 import { Settlements } from './world/settlements';
@@ -38,14 +39,15 @@ const sky = new Sky(scene);
 const clouds = new Clouds();
 scene.add(clouds.mesh);
 
-const terrain = createPassageTerrain(createVolcanicTerrain(createTerrain(1337)));
+const terrain = createPassageTerrain(createAlpineTerrain(createVolcanicTerrain(createTerrain(1337))));
 const waterLevel = terrain.waterLevel ?? -Infinity;
 const objects = new ObjectCache(terrain);
 const chunks = new ChunkManager(terrain, objects);
 chunks.prime(0, 0, 2);
 scene.add(chunks.group);
 const water = new Water(waterLevel);
-scene.add(water.mesh);
+const lake = makeAlpineLake();
+scene.add(water.mesh, lake.mesh);
 
 const realms: { terrain: typeof terrain; mode: Realm } = { terrain, mode: 'surface' };
 scene.add(new Passages(terrain).group);
@@ -60,7 +62,7 @@ const settlements = new Settlements(terrain);
 scene.add(creatures.group, residents.group, settlements.group, realmCreatures.group);
 scene.add(fish.mesh, deepSea.group);
 const physics = new PhysicsWorld(realms.terrain, 0, 0, {
-  near: (x, z) => realms.mode === 'surface' ? objects.near(x, z) : [],
+  near: (x, z) => realms.mode === 'surface' ? objects.near(x, z) : caveObstacles(x, z),
 });
 const cube = new Cube();
 scene.add(cube.group, cube.shadow);
@@ -140,6 +142,7 @@ function placeAt(x: number, z: number, y: number, inWater: boolean): string {
   if (realms.mode === 'cave') return '지하 동굴';
   if (realms.mode === 'sky') return '구름 위 전망대';
   if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < 105 && !inWater) return '화산';
+  if (alpineDistance(x, z) < 1.55) return '빙하호';
   const settlement = settlementNameAt(x, z);
   if (settlement) return settlement;
   if (inWater) return terrainInfo(x, z, 1337).landness < 0.6 ? '바다' : '강·호수';
@@ -200,7 +203,8 @@ function frame(now: number) {
   fish.update(s.x, s.z, time, dt, started && realms.mode === 'surface' && s.submerged);
   deepSea.update(s.x, s.z, started && realms.mode === 'surface' && s.submerged);
   const speed = Math.hypot(s.vx, s.vz);
-  const feetY = s.inWater && !s.submerged ? waterLevel + 0.05 : s.groundY + 0.1;
+  const localWater = waterHeightAt(terrain, s.x, s.z);
+  const feetY = s.inWater && !s.submerged ? localWater + 0.05 : s.groundY + 0.1;
 
   // ---- 연출: 점프/착지/발걸음 ----
   if (jumped) {
@@ -247,7 +251,7 @@ function frame(now: number) {
 
   // 그림자/기울기: 물 위나 바위 위에서는 수평으로, 그 외에는 지형 법선을 따른다
   const terrH = realms.terrain.height(pos.x, pos.z);
-  const groundY = s.inWater && !s.submerged ? waterLevel - 0.01 : s.groundY;
+  const groundY = s.inWater && !s.submerged ? localWater - 0.01 : s.groundY;
   if (s.inWater || s.groundY > terrH + 0.05) normal.set(0, 1, 0);
   else {
     surfaceNormal(realms.terrain, pos.x, pos.z, nTmp);
@@ -280,16 +284,24 @@ function frame(now: number) {
     camTarget.y + (s.submerged ? 0.35 : 1.2) + Math.sin(camPitch) * (s.submerged ? 0.5 : CAM_DIST),
     camTarget.z + Math.cos(camYaw) * cp * cameraDistance,
   );
-  if (realms.mode === 'cave') camera.position.x = THREE.MathUtils.clamp(camera.position.x, -13, -7);
-  if (s.submerged && realms.terrain.height(camera.position.x, camera.position.z) + 0.5 >= waterLevel) {
+  if (realms.mode === 'cave') {
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, CAVE.x - 3.15, CAVE.x + 3.15);
+    camera.position.z = Math.max(camera.position.z, CAVE.endWall + 4);
+  }
+  let cameraWater = waterHeightAt(terrain, camera.position.x, camera.position.z);
+  if (s.submerged && (cameraWater !== localWater || terrain.height(camera.position.x, camera.position.z) + .5 >= cameraWater)) {
     camera.position.x = pos.x;
     camera.position.z = pos.z;
+    cameraWater = waterHeightAt(terrain, pos.x, pos.z);
   }
-  const cameraFloor = realms.terrain.height(camera.position.x, camera.position.z);
-  const minY = s.submerged ? cameraFloor + 0.25 : Math.max(cameraFloor, realms.terrain.waterAt?.(camera.position.x, camera.position.z) ?? realms.terrain.waterLevel ?? -Infinity) + 1;
+  const cameraFloor = terrain.height(camera.position.x, camera.position.z);
+  const minY = s.submerged ? cameraFloor + 0.25 : Math.max(cameraFloor, cameraWater) + 1;
   if (camera.position.y < minY) camera.position.y = minY;
-  if (realms.mode === 'cave') camera.position.y = Math.min(camera.position.y, terrain.height(camera.position.x, camera.position.z) + 3.8);
-  if (s.submerged && minY < waterLevel - 0.1) camera.position.y = Math.min(camera.position.y, waterLevel - 0.1);
+  if (realms.mode === 'cave' && isCave(camera.position.x, camera.position.z)) {
+    const ceiling = caveCeilingAt(terrain, camera.position.x, camera.position.z);
+    camera.position.y = Math.min(camera.position.y, Math.max(minY, ceiling - .45));
+  }
+  if (s.submerged && minY < cameraWater - 0.1) camera.position.y = Math.min(camera.position.y, cameraWater - 0.1);
   camera.lookAt(camTarget.x, camTarget.y + (s.submerged ? 0.2 : 1.1), camTarget.z);
 
   const skyState = sampleSky(timeOfDay);
@@ -303,26 +315,28 @@ function frame(now: number) {
       fireflyT = 0.35;
       const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 9;
       const fx2 = s.x + Math.cos(a) * r, fz2 = s.z + Math.sin(a) * r;
-      const fy = Math.max(terrain.height(fx2, fz2), waterLevel) + 0.6 + Math.random() * 2.2;
+      const fy = Math.max(terrain.height(fx2, fz2), waterHeightAt(terrain, fx2, fz2)) + 0.6 + Math.random() * 2.2;
       particles.emit(fx2, fy, fz2, 1, { color: '#fff6a8', speed: 0.5, up: 0.4, size: 0.09, life: 4, gravity: 0 });
     }
   }
   sky.update(camera, skyState, time);
-  const underwaterView = realms.mode === 'surface' && camera.position.y < waterLevel;
+  const underwaterView = realms.mode === 'surface' && camera.position.y < cameraWater;
   document.body.classList.toggle('underwater', underwaterView);
   const fog = scene.fog as THREE.Fog;
   const inCave = realms.mode === 'cave';
   fog.near = underwaterView ? 5 : inCave ? 12 : 30;
   fog.far = underwaterView ? 38 : inCave ? 68 : 92;
   if (underwaterView) {
-    const depth = THREE.MathUtils.clamp((waterLevel - camera.position.y) / 20, 0, 1);
+    const depth = THREE.MathUtils.clamp((cameraWater - camera.position.y) / 20, 0, 1);
     fog.color.set('#5ea6b1').lerp(DEEP_WATER_COLOR, depth);
     fog.far = 38 - depth * 10;
   }
   else if (inCave) fog.color.set('#55566a');
   clouds.mesh.visible = !inCave;
   clouds.update(camera, time, skyState);
-  water.update(camera.position.x, camera.position.z, time, Math.min(1, skyState.sunIntensity / 1.25 + skyState.moonIntensity * 0.3));
+  const brightness = Math.min(1, skyState.sunIntensity / 1.25 + skyState.moonIntensity * 0.3);
+  water.update(camera.position.x, camera.position.z, time, brightness);
+  lake.update(camera.position.x, camera.position.z, time, brightness);
   if (started) audio.update(dt, { elevation: skyState.elevation, speed, grounded: s.grounded });
 
   renderer.render(scene, camera);
@@ -340,7 +354,7 @@ requestAnimationFrame(frame);
   teleport: (x: number, z: number, y?: number) => {
     const st = physics.state;
     st.x = st.px = x; st.z = st.pz = z;
-    st.y = st.py = y ?? Math.max(realms.terrain.height(x, z), realms.terrain.waterLevel ?? -Infinity) + 4;
+    st.y = st.py = y ?? Math.max(terrain.height(x, z), waterHeightAt(terrain, x, z)) + 4;
     st.vx = st.vy = st.vz = 0;
     camTarget.set(x, st.y, z);
   },

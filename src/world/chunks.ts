@@ -5,6 +5,7 @@ import type { Terrain } from '../terrain/height';
 import { CHUNK, ObjectCache, VARIANT, VARIANT_COUNT, type WorldObj } from './scatter';
 import { isCave } from './passages';
 import { VOLCANO } from './volcano';
+import { ALPINE_LAKE, alpineDistance } from './alpineLake';
 
 // 플레이어 주변 청크를 불러오고 멀어지면 내려놓는다. 지형은 높이 함수를 격자로 샘플링해서 만들고,
 // 가장자리 법선은 이웃 청크와 같은 값이 나오도록 한 칸 바깥까지 샘플링한다 (이음새 없음).
@@ -48,6 +49,8 @@ const SEA_DEEP = hex('#3a7fa6');
 const FOAM = hex('#ffffff');
 const CAVE_GROUND = hex('#77736e');
 const VOLCANIC_ROCK = hex('#625b55');
+const LAKE_GRAVEL = hex('#b2ac99');
+const LAKE_BOTTOM = hex('#47786f');
 const ROCK_TINT: RGB[] = [
   [1, 1, 1], [1, 0.96, 1], [1, 0.9, 0.82], [1, 0.8, 0.6], [0.95, 1, 0.95], [0.95, 1, 1], [0.92, 0.88, 1], [0.88, 1, 1],
 ];
@@ -332,7 +335,7 @@ export class ChunkManager {
 
   private build(cx: number, cz: number): Chunk {
     const t = this.terrain;
-    const water = t.waterLevel ?? -Infinity;
+    const seaLevel = t.waterLevel ?? -Infinity;
     const ox = cx * CHUNK, oz = cz * CHUNK;
 
     for (let j = 0; j < HALO; j++) {
@@ -359,6 +362,9 @@ export class ChunkManager {
       for (let i = 0; i < N; i++) {
         const h = (jj: number, ii: number) => hGrid[(jj + 1) * HALO + (ii + 1)];
         const y = h(j, i);
+        const wx = ox + i * CELL, wz = oz + j * CELL;
+        const byLake = alpineDistance(wx, wz) < 1.19;
+        const water = byLake ? ALPINE_LAKE.level : seaLevel;
         const dx = h(j, i + 1) - h(j, i - 1);
         const dz = h(j + 1, i) - h(j - 1, i);
         const nx = -dx / (2 * CELL), nz = -dz / (2 * CELL);
@@ -392,11 +398,14 @@ export class ChunkManager {
         if (y < water) {
           // 바다 밑: 얕은 곳은 모래빛 → 청록 → 깊은 곳은 푸른색
           const depth = water - y;
-          lerpC(tmp, SAND, SEA_SHALLOW, clamp01(depth / 2));
-          lerpC(c, tmp, SEA_DEEP, clamp01((depth - 2.5) / 12));
+          if (byLake) lerpC(c, LAKE_GRAVEL, LAKE_BOTTOM, clamp01(depth / 7));
+          else {
+            lerpC(tmp, SAND, SEA_SHALLOW, clamp01(depth / 2));
+            lerpC(c, tmp, SEA_DEEP, clamp01((depth - 2.5) / 12));
+          }
         } else {
           // 해변: 물가는 모래 (설원은 얼어붙은 해안)
-          lerpC(tmp, SAND, SNOW_SAND, snowW);
+          lerpC(tmp, byLake ? LAKE_GRAVEL : SAND, SNOW_SAND, snowW);
           lerpC(c, tmp, c, clamp01((y - water - 0.5) / 1.4));
           // 높은 곳: 바위 → 만년설
           lerpC(c, c, ROCK, clamp01((y - 11) / 6) * (1 - 0.7 * snowW));
@@ -409,7 +418,6 @@ export class ChunkManager {
         const foam = clamp01(1 - Math.abs(y - water) / 0.22) * 0.5;
         if (foam > 0) { tmp[0] = c[0]; tmp[1] = c[1]; tmp[2] = c[2]; lerpC(c, tmp, FOAM, foam); }
 
-        const wx = ox + i * CELL, wz = oz + j * CELL;
         const volcanic = clamp01((125 - Math.hypot(wx - VOLCANO.x, wz - VOLCANO.z)) / 28) * clamp01((y - water) / 3);
         if (volcanic > 0 || isCave(wx, wz)) {
           tmp[0] = c[0]; tmp[1] = c[1]; tmp[2] = c[2];

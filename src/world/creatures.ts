@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Terrain } from '../terrain/height';
+import { waterHeightAt, type Terrain } from '../terrain/height';
 import { dominantBiome, type Biome, BIOMES } from '../terrain/biome';
 import { CHUNK, mulberry32 } from './scatter';
 import { inSettlement } from './settlement-layout';
@@ -152,8 +152,9 @@ export class CreatureField {
         let z = animal.z + Math.sin(t) * radius;
         if (time >= animal.nextGroundSample) {
           const height = this.terrain.height(x, z);
-          animal.overWater = !animal.bird && height < (this.terrain.waterLevel ?? -Infinity) + 0.15;
-          animal.groundY = animal.overWater ? this.terrain.height(animal.x, animal.z) : Math.max(height, this.terrain.waterLevel ?? -Infinity);
+          const water = waterHeightAt(this.terrain, x, z);
+          animal.overWater = !animal.bird && height < water + 0.15;
+          animal.groundY = animal.overWater ? this.terrain.height(animal.x, animal.z) : Math.max(height, water);
           // 비싼 지형 샘플은 초당 약 7번이면 작은 동물의 느린 이동에 충분하다.
           animal.nextGroundSample = time + 0.15;
         }
@@ -179,7 +180,7 @@ export class CreatureField {
       const biome = this.terrain.climate ? BIOMES[dominantBiome(this.terrain.climate(x, z))] : 'meadow';
       const species = creatureSpecies(biome, height, roll);
       const isBird = species === 'bird' || species === 'parrot';
-      if (!isBird && height < (this.terrain.waterLevel ?? -Infinity) + 1.5) continue;
+      if (!isBird && height < waterHeightAt(this.terrain, x, z) + 1.5) continue;
       if (!isBird && inSettlement(x, z)) continue;
       if (!isBird && species !== 'goat' && Math.max(Math.abs(this.terrain.height(x + 1, z) - height), Math.abs(this.terrain.height(x, z + 1) - height)) > 1) continue;
       const made = isBird ? bird(species === 'parrot') : { group: species === 'rabbit' ? rabbit(roll < 0.2) : species === 'turtle' ? turtle() : quadruped(species as 'fox' | 'deer' | 'goat'), wings: undefined };

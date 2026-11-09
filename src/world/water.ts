@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { CAVE } from './passages';
+
+type FixedSurface = { geometry: THREE.BufferGeometry; x: number; z: number; color: string };
 
 // 카메라를 따라다니는 큰 수면. 반투명이라 바닥의 모래빛이 비치고, 햇빛에 반짝인다.
 export class Water {
@@ -6,9 +9,9 @@ export class Water {
   private readonly uTime = { value: 0 };
   private readonly uSun = { value: 1 };
 
-  constructor(level: number) {
+  constructor(level: number, private readonly fixed?: FixedSurface) {
     const mat = new THREE.MeshLambertMaterial({
-      color: '#7fd3ea', emissive: '#2a6f86', emissiveIntensity: 0.18,
+      color: fixed?.color ?? '#7fd3ea', emissive: '#2a6f86', emissiveIntensity: 0.18,
       transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide,
     });
     mat.onBeforeCompile = (sh) => {
@@ -19,7 +22,8 @@ export class Water {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uTime;\nuniform float uSun;')
-        .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (abs(vWPos.x + 10.0) < 8.0 && vWPos.z < -22.0 && vWPos.z > -145.0) discard;')
+        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+if (abs(vWPos.x - (${CAVE.x}.0)) < ${CAVE.halfWidth}.0 && vWPos.z < ${CAVE.front}.0 && vWPos.z > ${CAVE.back}.0) discard;`)
         .replace(
           '#include <dithering_fragment>',
           `float s = sin(vWPos.x * 1.7 + uTime * 1.3) * sin(vWPos.z * 1.9 - uTime * 1.1)
@@ -30,16 +34,18 @@ export class Water {
            #include <dithering_fragment>`,
         );
     };
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2), mat);
-    this.mesh.position.y = level;
+    this.mesh = new THREE.Mesh(fixed?.geometry ?? new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2), mat);
+    this.mesh.position.set(fixed?.x ?? 0, level, fixed?.z ?? 0);
     this.mesh.renderOrder = 1;
-    this.mesh.frustumCulled = false;
+    this.mesh.frustumCulled = !!fixed;
   }
 
   /** brightness: 0(밤)~1(낮). 반짝임 세기를 정한다 */
   update(x: number, z: number, time: number, brightness: number) {
-    this.mesh.position.x = x;
-    this.mesh.position.z = z;
+    if (!this.fixed) {
+      this.mesh.position.x = x;
+      this.mesh.position.z = z;
+    }
     this.uTime.value = time;
     this.uSun.value = Math.max(0.12, brightness);
   }

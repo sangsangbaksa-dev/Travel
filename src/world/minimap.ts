@@ -1,6 +1,7 @@
 import { SETTLEMENTS } from './settlement-layout';
 import type { WreckSite } from './deepSea';
 import { VOLCANO } from './volcano';
+import { ALPINE_LAKE } from './alpineLake';
 
 /** 북쪽(-Z)이 위인 탐험 지도. 대상이 멀면 가장자리에 방향을 표시한다. */
 export class Minimap {
@@ -9,7 +10,7 @@ export class Minimap {
   private elapsed = Infinity;
   constructor(parent: HTMLElement, private readonly wreck: WreckSite | null = null) {
     this.element.width = this.element.height = 240;
-    this.element.setAttribute('aria-label', '탐험 지도. 위쪽은 북쪽이며 마을, 도시, 동굴, 계단과 난파선 방향을 표시합니다.');
+    this.element.setAttribute('aria-label', '탐험 지도. 북쪽을 기준으로 마을, 도시, 동굴, 계단, 화산, 빙하호와 난파선의 위치를 표시합니다.');
     this.element.setAttribute('role', 'img');
     Object.assign(this.element.style, {
       position: 'fixed', top: 'max(53px, calc(env(safe-area-inset-top, 0px) + 43px))',
@@ -40,6 +41,7 @@ export class Minimap {
       { x: -10, z: 0, label: '굴', color: '#538c86' },
       { x: 12, z: 0, label: '계', color: '#a27bb1' },
       { ...VOLCANO, label: '화', color: '#b56d4e' },
+      { ...ALPINE_LAKE, label: '호', color: '#417f76' },
     ];
     if (this.wreck) points.push({ ...this.wreck, label: '배', color: '#557b8c' });
     for (const point of points) {

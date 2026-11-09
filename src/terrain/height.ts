@@ -24,6 +24,10 @@ export interface TerrainInfo {
   river: number;
 }
 
+export function waterHeightAt(terrain: Terrain, x: number, z: number): number {
+  return terrain.waterAt?.(x, z) ?? terrain.waterLevel ?? -Infinity;
+}
+
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const smooth = (a: number, b: number, x: number) => {
   const u = clamp01((x - a) / (b - a));

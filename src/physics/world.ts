@@ -1,4 +1,4 @@
-import { surfaceNormal, type Terrain } from '../terrain/height';
+import { surfaceNormal, waterHeightAt, type Terrain } from '../terrain/height';
 import { FIXED_DT } from './clock';
 
 // ---- 손맛 상수 (여기만 만지면 점프 느낌이 바뀐다) ----
@@ -122,7 +122,7 @@ export class PhysicsWorld {
         }
       }
     }
-    const surface = (this.terrain.waterAt?.(x, z) ?? this.terrain.waterLevel ?? -Infinity) - FLOAT_DEPTH;
+    const surface = waterHeightAt(this.terrain, x, z) - FLOAT_DEPTH;
     this.sampledWater = surface > g;
     return this.sampledWater && !underWater ? surface : g;
   }
@@ -155,7 +155,7 @@ export class PhysicsWorld {
     }
 
     // 잠수 중에는 수면을 바닥으로 취급하지 않고 수영 속도로 수직 이동한다.
-    const floatY = (this.terrain.waterAt?.(s.x, s.z) ?? this.terrain.waterLevel ?? -Infinity) - FLOAT_DEPTH + HALF;
+    const floatY = waterHeightAt(this.terrain, s.x, s.z) - FLOAT_DEPTH + HALF;
     if ((input.diveHeld && s.inWater && s.y <= floatY + 0.1) || s.submerged) {
       s.submerged = true;
       s.buffer = s.coyote = 0;
@@ -174,10 +174,11 @@ export class PhysicsWorld {
         s.y = floor + HALF;
         s.vy = Math.max(0, s.vy);
       }
-      if (!s.inWater || s.y >= floatY) {
+      const nextFloatY = waterHeightAt(this.terrain, s.x, s.z) - FLOAT_DEPTH + HALF;
+      if (!s.inWater || s.y >= nextFloatY) {
         s.submerged = false;
         s.grounded = true;
-        s.groundY = s.inWater ? floatY - HALF : floor;
+        s.groundY = s.inWater ? nextFloatY - HALF : floor;
         s.y = s.groundY + HALF;
         s.vy = 0;
       }

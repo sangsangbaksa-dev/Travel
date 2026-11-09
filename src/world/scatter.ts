@@ -1,7 +1,7 @@
 import { BUILDING_OFFSETS, CITY_BUILDING_OFFSETS, inSettlement, SETTLEMENTS } from './settlement-layout';
 import { inPassage } from './passages';
 import { biomeWeights, dominantBiome, type Climate } from '../terrain/biome';
-import { noise2, surfaceNormal, type Terrain } from '../terrain/height';
+import { noise2, surfaceNormal, waterHeightAt, type Terrain } from '../terrain/height';
 
 // 청크별 나무/바위/선인장 배치. 좌표와 시드만으로 결정되므로
 // 렌더링과 물리가 같은 결과를 공유하고, 어디서든 같은 월드가 나온다.
@@ -88,7 +88,6 @@ function pickVariant(biome: number, roll: number): number {
 
 export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 1337): WorldObj[] {
   const rnd = mulberry32(Math.imul(cx, 73856093) ^ Math.imul(cz, 19349663) ^ Math.imul(seed, 83492791));
-  const water = t.waterLevel ?? -Infinity;
   const out: WorldObj[] = [];
   const n = { x: 0, y: 1, z: 0 };
 
@@ -104,7 +103,7 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
 
     if (Math.hypot(x, z) < SPAWN_CLEAR || inSettlement(x, z) || inPassage(x, z)) continue;
     const y = t.height(x, z);
-    if (y < water + 0.8) continue;
+    if (y < waterHeightAt(t, x, z) + 0.8) continue;
     surfaceNormal(t, x, z, n);
     if (n.y < 0.88) continue;
 
