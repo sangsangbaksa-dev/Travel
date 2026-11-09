@@ -22,7 +22,7 @@ export interface WorldObj {
   top: number;
 }
 
-function mulberry32(a: number) {
+export function mulberry32(a: number) {
   return () => {
     a |= 0;
     a = (a + 0x6d2b79f5) | 0;
