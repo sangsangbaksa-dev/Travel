@@ -28,6 +28,8 @@ export interface Obstacle {
   z: number;
   r: number;
   top: number;
+  collisionBottom?: number;
+  collisionTop?: number;
   /** 마법진: 밟으면 점프 속도의 몇 배로 쏘아 올린다 */
   launch?: number;
 }
@@ -43,6 +45,8 @@ export interface PhysicsInput {
   jumpPressed: boolean;
   /** 점프 버튼이 눌려 있는가 */
   jumpHeld: boolean;
+  /** 수영 중 잠수 버튼을 누르고 있는가 */
+  diveHeld?: boolean;
 }
 
 export interface PhysicsState {
@@ -56,6 +60,8 @@ export interface PhysicsState {
   onSteep: boolean;
   /** 물 위에 떠 있는가 */
   inWater: boolean;
+  /** 수면 아래에서 수영 중인가 */
+  submerged: boolean;
   /** 큐브 밑면 아래 지지면의 높이 */
   groundY: number;
   coyote: number;
@@ -76,7 +82,7 @@ export interface PhysicsState {
 export class PhysicsWorld {
   readonly state: PhysicsState;
   private readonly normal = { x: 0, y: 1, z: 0 };
-  private readonly water: number;
+
   private sampledWater = false;
   private sampledRaised = false;
 
@@ -86,12 +92,12 @@ export class PhysicsWorld {
     z = 0,
     private readonly obstacles?: ObstacleSource,
   ) {
-    this.water = terrain.waterLevel ?? -Infinity;
+
     const g = this.sample(x, z);
     const y = g + HALF;
     this.state = {
       x, y, z, vx: 0, vy: 0, vz: 0,
-      grounded: true, onSteep: false, inWater: this.sampledWater, groundY: g,
+      grounded: true, onSteep: false, inWater: this.sampledWater, submerged: false, groundY: g,
       coyote: COYOTE_TIME, buffer: 0,
       px: x, py: y, pz: z,
       jumped: false, landImpact: 0, launched: false, noCut: false,
@@ -102,12 +108,12 @@ export class PhysicsWorld {
    * 큐브 밑면 아래 지지면의 높이. 모서리까지 샘플링해 비탈에서 파고들지 않게 하고,
    * 올라설 수 있는 바위 윗면과 수면(물에 뜨는 높이)도 포함한다.
    */
-  private sample(x: number, z: number): number {
+  private sample(x: number, z: number, underWater = false): number {
     const t = this.terrain;
     const r = HALF * 0.85;
     let g = Math.max(t.height(x, z), t.height(x + r, z), t.height(x - r, z), t.height(x, z + r), t.height(x, z - r));
     this.sampledRaised = false;
-    if (this.obstacles) {
+    if (this.obstacles && !underWater) {
       for (const o of this.obstacles.near(x, z)) {
         if (o.top === Infinity || o.top <= g) continue;
         if (Math.hypot(x - o.x, z - o.z) < o.r + HALF * 0.6) {
@@ -116,9 +122,9 @@ export class PhysicsWorld {
         }
       }
     }
-    const surface = this.water - FLOAT_DEPTH;
+    const surface = (this.terrain.waterLevel ?? -Infinity) - FLOAT_DEPTH;
     this.sampledWater = surface > g;
-    return this.sampledWater ? surface : g;
+    return this.sampledWater && !underWater ? surface : g;
   }
 
   step(input: PhysicsInput, dt = FIXED_DT): void {
@@ -133,7 +139,7 @@ export class PhysicsWorld {
     const inLen = Math.hypot(input.moveX, input.moveZ);
     const hasInput = inLen > 0.001;
     const scale = hasInput ? Math.min(1, inLen) / inLen : 0;
-    const speed = MAX_SPEED * (s.inWater && s.grounded ? WATER_SPEED : 1);
+    const speed = MAX_SPEED * (s.inWater && (s.grounded || s.submerged) ? WATER_SPEED : 1);
     const tvx = input.moveX * scale * speed;
     const tvz = input.moveZ * scale * speed;
     const accel = s.grounded ? (hasInput ? GROUND_ACCEL : GROUND_FRICTION) : AIR_ACCEL;
@@ -146,6 +152,36 @@ export class PhysicsWorld {
     } else {
       s.vx += (dvx / dlen) * maxDv;
       s.vz += (dvz / dlen) * maxDv;
+    }
+
+    // 잠수 중에는 수면을 바닥으로 취급하지 않고 수영 속도로 수직 이동한다.
+    const floatY = (this.terrain.waterLevel ?? -Infinity) - FLOAT_DEPTH + HALF;
+    if ((input.diveHeld && s.inWater && s.y <= floatY + 0.1) || s.submerged) {
+      s.submerged = true;
+      s.buffer = s.coyote = 0;
+      s.jumped = false;
+      const vertical = input.diveHeld ? -4 : input.jumpHeld ? 4 : 0.8;
+      s.vy += (vertical - s.vy) * Math.min(1, dt * 7);
+      s.x += s.vx * dt;
+      s.z += s.vz * dt;
+      s.y += s.vy * dt;
+      const floor = this.sample(s.x, s.z, true);
+      s.inWater = this.sampledWater;
+      s.groundY = floor;
+      s.onSteep = false;
+      s.grounded = false;
+      if (s.y < floor + HALF) {
+        s.y = floor + HALF;
+        s.vy = Math.max(0, s.vy);
+      }
+      if (!s.inWater || s.y >= floatY) {
+        s.submerged = false;
+        s.grounded = true;
+        s.groundY = s.inWater ? floatY - HALF : floor;
+        s.y = s.groundY + HALF;
+        s.vy = 0;
+      }
+      return;
     }
 
     // 2) 타이머: 코요테 / 점프 버퍼
@@ -178,7 +214,7 @@ export class PhysicsWorld {
     if (this.obstacles) {
       const feetPrev = s.py - HALF;
       for (const o of this.obstacles.near(s.x, s.z)) {
-        if (feetPrev >= o.top - 0.1) continue;
+        if (feetPrev >= (o.collisionTop ?? o.top) - 0.1 || s.y + HALF <= (o.collisionBottom ?? -Infinity)) continue;
         let dx = s.x - o.x;
         let dz = s.z - o.z;
         let d = Math.hypot(dx, dz);

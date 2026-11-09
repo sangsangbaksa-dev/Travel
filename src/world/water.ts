@@ -9,7 +9,7 @@ export class Water {
   constructor(level: number) {
     const mat = new THREE.MeshLambertMaterial({
       color: '#7fd3ea', emissive: '#2a6f86', emissiveIntensity: 0.18,
-      transparent: true, opacity: 0.72, depthWrite: false,
+      transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide,
     });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.uTime;

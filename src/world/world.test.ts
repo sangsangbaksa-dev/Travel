@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BIOMES, climateAt, dominantBiome } from '../terrain/biome';
 import { createTerrain, terrainInfo, WATER_LEVEL } from '../terrain/height';
-import { CHUNK, generateChunkObjects, ObjectCache, RUNE_LAUNCH, RUNE_STAR_HEIGHT, SPAWN_CLEAR, STARTER_RUNE, VARIANT } from './scatter';
+import { CHUNK, generateChunkObjects, ObjectCache, RUNE_LAUNCH, SPAWN_CLEAR, STARTER_RUNE, VARIANT } from './scatter';
 import {
   FLOAT_DEPTH, GRAVITY, HALF, JUMP_HEIGHT, JUMP_SPEED, MAX_SPEED, PhysicsWorld, WATER_SPEED, type Obstacle, type PhysicsInput,
 } from '../physics/world';
@@ -233,18 +233,6 @@ describe('마법진', () => {
     expect(peak).toBeGreaterThan(expected - 0.4);
     expect(peak).toBeLessThan(expected + 0.4);
     expect(peak).toBeGreaterThan(JUMP_HEIGHT * 2.5);
-  });
-
-  it('마법진 위의 큰 별에 닿을 수 있는 높이다', () => {
-    const w = new PhysicsWorld(flat, 0, 0, src([pad]));
-    w.step(idle);
-    let best = Infinity;
-    for (let i = 0; i < 200; i++) {
-      w.step(idle);
-      best = Math.min(best, Math.abs(w.state.y - (0 + RUNE_STAR_HEIGHT)));
-      if (w.state.grounded) break;
-    }
-    expect(best).toBeLessThan(1.3); // 별을 먹는 반경
   });
 
   it('마법진 밖에서는 발사되지 않는다', () => {

@@ -1,3 +1,4 @@
+import { BUILDING_OFFSETS, CITY_BUILDING_OFFSETS, inSettlement, SETTLEMENTS } from './settlement-layout';
 import { biomeWeights, dominantBiome, type Climate } from '../terrain/biome';
 import { noise2, surfaceNormal, type Terrain } from '../terrain/height';
 
@@ -16,8 +17,6 @@ export const VARIANT_COUNT = 11;
 
 /** 마법진 점프 패드의 발사 배율 (점프 속도의 몇 배인가) */
 export const RUNE_LAUNCH = 1.75;
-/** 마법진 위에 떠 있는 큰 별의 높이 (마법진 지면 기준) */
-export const RUNE_STAR_HEIGHT = 7.2;
 /** 시작 지점 가까이에 둔 첫 마법진 */
 export const STARTER_RUNE: [number, number] = [12, -8];
 
@@ -37,6 +36,8 @@ export interface WorldObj {
   r: number;
   /** 위에 설 수 있는 높이. 나무는 설 수 없어서 Infinity */
   top: number;
+  collisionBottom?: number;
+  collisionTop?: number;
   /** 마법진: 밟으면 위로 쏘아 올리는 배율 */
   launch?: number;
 }
@@ -105,7 +106,7 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
     const variantRoll = rnd();
     const accept = rnd();
 
-    if (Math.hypot(x, z) < SPAWN_CLEAR) continue;
+    if (Math.hypot(x, z) < SPAWN_CLEAR || inSettlement(x, z)) continue;
     const y = t.height(x, z);
     if (y < water + 0.8) continue;
     surfaceNormal(t, x, z, n);
@@ -147,7 +148,7 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
     const floatRoll = rnd2();
     const hover = rnd2();
     const rot = rnd2() * Math.PI * 2;
-    if (Math.hypot(x, z) < SPAWN_CLEAR + 4) continue;
+    if (Math.hypot(x, z) < SPAWN_CLEAR + 4 || inSettlement(x, z)) continue;
     const y = t.height(x, z);
     if (y < water + 0.8) continue;
     const biome = dominantBiome(t.climate ? t.climate(x, z) : DEFAULT_CLIMATE);
@@ -193,6 +194,16 @@ export class ObjectCache {
       this.nearKey = key;
       this.near3 = [];
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) this.near3.push(...this.get(cx + dx, cz + dz));
+      // 건물은 렌더링 청크에 추가하지 않고 물리 충돌에만 제공한다.
+      SETTLEMENTS.forEach((place, style) => {
+        for (const [i, [dx, dz]] of (style === 2 ? CITY_BUILDING_OFFSETS : BUILDING_OFFSETS).entries()) {
+          const bx = place.x + dx, bz = place.z + dz;
+          if (Math.abs(bx - x) > CHUNK * 2 || Math.abs(bz - z) > CHUNK * 2) continue;
+          const base = Math.max(this.terrain.height(bx, bz), this.terrain.waterLevel ?? -Infinity);
+          const height = style === 2 ? (i >= 8 ? 9 + (i % 3) * 1.5 : 5 + (i % 3) * 1.3) : 2.7 + (i % 2) * .5;
+          this.near3.push({ kind: 'tree', x: bx, z: bz, y: base, scale: 1, rot: 0, variant: 0, biome: 0, r: style === 2 ? 2.35 : 2.1, top: Infinity, collisionBottom: base - 0.5, collisionTop: base + height + 2.1 });
+        }
+      });
     }
     return this.near3;
   }

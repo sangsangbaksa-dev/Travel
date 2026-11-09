@@ -23,10 +23,30 @@
       -webkit-user-select: none; user-select: none; touch-action: none;
     }
     #app { position: fixed; inset: 0; }
+    #waterTint { position: fixed; inset: 0; background: rgba(40, 145, 164, .18); opacity: 0; pointer-events: none; transition: opacity .35s; }
+    .underwater #waterTint { opacity: 1; }
+    #realmFade { position: fixed; inset: 0; z-index: 2; opacity: 0; background: #11121c; pointer-events: none; }
     canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     [hidden] { display: none !important; }
     button { font: inherit; color: inherit; cursor: pointer; }
     :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+    .reticle {
+      position: fixed; left: 50%; top: 50%; width: 18px; height: 18px;
+      transform: translate(-50%, -50%); pointer-events: none; opacity: 0;
+      filter: drop-shadow(0 1px 2px rgba(38, 44, 57, .6)); transition: opacity .25s;
+    }
+    .game-started .reticle { opacity: .9; }
+    .reticle::before, .reticle::after {
+      content: ''; position: absolute; left: 50%; top: 50%; background: white; border-radius: 2px;
+      transform: translate(-50%, -50%);
+    }
+    .reticle::before { width: 14px; height: 1px; }
+    .reticle::after { width: 1px; height: 14px; }
+    .reticle span {
+      position: absolute; inset: 7px; border: 1px solid white; border-radius: 50%;
+      background: rgba(60, 66, 78, .65); box-shadow: 0 0 0 1px rgba(60, 66, 78, .3);
+    }
 
     .pill {
       display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px;
@@ -40,12 +60,6 @@
       position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); top: max(12px, env(safe-area-inset-top, 0px));
       display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
     }
-    .score { font-family: var(--display); font-size: 22px; padding: 6px 16px 6px 12px; }
-    .score svg { width: 22px; height: 22px; flex: none; }
-    .score.bump { animation: bump .35s ease-out; }
-    @keyframes bump { 40% { transform: scale(1.18); } }
-    .compass svg { width: 18px; height: 18px; flex: none; transition: transform .12s linear; }
-    .compass span { font-variant-numeric: tabular-nums; }
     .on { background: var(--pink); color: #fff; }
 
     .hint {
@@ -58,6 +72,7 @@
     .hint.hide { opacity: 0; }
     .toast {
       position: fixed; left: 50%; top: 30%; transform: translate(-50%, 0) scale(.9); opacity: 0;
+      z-index: 3;
       font-family: var(--display); font-size: clamp(22px, 5vw, 34px); color: #fff; text-align: center;
       text-shadow: 0 2px 0 var(--pink-deep), 0 4px 14px rgba(80, 60, 110, .35);
       pointer-events: none; transition: opacity .35s, transform .35s; max-width: calc(100vw - 32px);
@@ -71,7 +86,7 @@
       display: grid; place-items: center; touch-action: none;
     }
     .knob { width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 255, 255, .9); box-shadow: 0 2px 8px rgba(80, 60, 110, .25); }
-    .jumpbtn, .startbtn {
+    .jumpbtn, .divebtn, .startbtn {
       border: 0; border-radius: 999px; background: var(--pink); color: #fff; font-family: var(--display);
       box-shadow: 0 4px 0 var(--pink-deep), 0 8px 16px rgba(80, 60, 110, .25); touch-action: none;
     }
@@ -79,7 +94,11 @@
       position: fixed; right: max(28px, env(safe-area-inset-right, 0px)); bottom: max(40px, env(safe-area-inset-bottom, 0px));
       width: 88px; height: 88px; font-size: 20px;
     }
-    .jumpbtn:active, .startbtn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--pink-deep); }
+    .divebtn {
+      position: fixed; right: max(42px, env(safe-area-inset-right, 0px)); bottom: max(145px, env(safe-area-inset-bottom, 0px));
+      width: 60px; height: 60px; font-size: 16px; background: #79bfcc; box-shadow: 0 4px 0 #5298a9, 0 8px 16px rgba(80, 60, 110, .2);
+    }
+    .jumpbtn:active, .divebtn:active, .startbtn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--pink-deep); }
 
     .start {
       position: fixed; inset: 0; display: grid; place-items: center; z-index: 20;
@@ -103,22 +122,17 @@
     .tip { font-size: 12px; opacity: .8; }
 
     @media (prefers-reduced-motion: reduce) {
-      .score.bump, .toast, .start { animation: none; transition: none; }
+      .toast, .start { animation: none; transition: none; }
     }
   </style>
 </head>
 <body>
   <div id="app"></div>
+  <div id="waterTint" aria-hidden="true"></div>
+  <div id="realmFade" aria-hidden="true"></div>
+  <div class="reticle" aria-hidden="true"><span></span></div>
 
   <div class="topleft">
-    <div class="pill score" id="score" aria-live="polite">
-      <svg viewBox="-1 -1 2 2" aria-hidden="true"><polygon fill="#ffc933" stroke="#ffb800" stroke-width=".12" stroke-linejoin="round" points="0,-.95 .27,-.33 .93,-.29 .43,.14 .58,.79 0,.43 -.58,.79 -.43,.14 -.93,-.29 -.27,-.33"/></svg>
-      <b id="scoreN">0</b>
-    </div>
-    <div class="pill compass" id="compass" hidden>
-      <svg id="arrow" viewBox="-1 -1 2 2" aria-hidden="true"><path fill="#ff7fa1" d="M0 -.9 L.6 .75 L0 .4 L-.6 .75 Z"/></svg>
-      <span id="dist">가까운 별</span>
-    </div>
     <div class="pill" id="place">초원</div>
   </div>
 
@@ -133,14 +147,15 @@
   <div class="start" id="start">
     <div class="card">
       <h1>큐브 월드</h1>
-      <p>끝없이 이어지는 세상을 돌아다니며 별 조각을 모아 보세요.</p>
+      <p>끝없이 이어지는 세상을 자유롭게 탐험해 보세요.</p>
       <ul class="keys">
         <li><b>이동</b><span>WASD · 방향키 · 왼쪽 스틱</span></li>
         <li><b>점프</b><span>스페이스 · 점프 버튼 (길게 누르면 더 높이)</span></li>
-        <li><b>시점</b><span>마우스 드래그 · Q/E · 화면 드래그</span></li>
+        <li><b>수영</b><span>Shift · 잠수 버튼으로 내려가기, 스페이스로 떠오르기</span></li>
+        <li><b>시점</b><span>마우스 이동 · Q/E · 화면 드래그</span></li>
         <li><b>시간 · 소리</b><span>T 빨리감기 · M 소리 끄기</span></li>
       </ul>
-      <p class="tip">높이 뜬 별은 점프로 잡고, 바다에서는 둥둥 떠다닐 수 있어요. 빛나는 마법진을 밟으면 하늘 높이 날아가요.</p>
+      <p class="tip">바다에서는 둥둥 떠다닐 수 있어요. 빛나는 마법진을 밟으면 하늘 높이 날아가요.</p>
       <button class="startbtn" id="startBtn" type="button">출발!</button>
     </div>
   </div>

@@ -12,8 +12,11 @@ export class Input {
   private keys = new Set<string>();
   private jumpQueued = false;
   private jumpTouch = false;
+  private diveTouch = false;
   private stick = { x: 0, y: 0 };
   private look = { yaw: 0, pitch: 0 };
+  private active = false;
+  private lastPointerType = '';
   readonly isTouch: boolean;
 
   constructor(private readonly canvas: HTMLElement, root: HTMLElement) {
@@ -28,17 +31,44 @@ export class Input {
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
 
-    // 마우스 드래그로 카메라 회전
+    addEventListener('pointerdown', (e) => { this.lastPointerType = e.pointerType; }, true);
+
+    // 잠금이 불가능하거나 거부되었을 때는 기존 드래그를 유지한다.
     let dragging = false;
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse') { dragging = true; canvas.setPointerCapture(e.pointerId); }
+      if (e.pointerType === 'mouse' && e.button === 0) {
+        if (document.pointerLockElement === canvas) return;
+        dragging = true;
+        canvas.setPointerCapture(e.pointerId);
+        if (this.active && document.pointerLockElement !== canvas) this.requestPointerLock();
+      }
     });
     canvas.addEventListener('pointerup', () => { dragging = false; });
+    canvas.addEventListener('pointercancel', () => { dragging = false; });
     canvas.addEventListener('pointermove', (e) => {
-      if (dragging && e.pointerType === 'mouse') this.addLook(e.movementX * 0.005, e.movementY * 0.004);
+      if (dragging && document.pointerLockElement !== canvas && e.pointerType === 'mouse') this.addLook(e.movementX * 0.005, e.movementY * 0.004);
     });
+    document.addEventListener('mousemove', (e) => {
+      if (document.pointerLockElement === canvas) this.addLook(e.movementX * 0.005, e.movementY * 0.004);
+    });
+    document.addEventListener('pointerlockchange', () => { dragging = false; });
 
     if (this.isTouch) this.buildTouchUi(root);
+  }
+
+  /** 시작 버튼이나 키 입력의 사용자 제스처 안에서 호출한다. */
+  start() {
+    this.active = true;
+    if (this.lastPointerType !== 'touch' && (this.lastPointerType === 'mouse' || matchMedia('(pointer: fine)').matches)) this.requestPointerLock();
+  }
+
+  private requestPointerLock() {
+    if (typeof this.canvas.requestPointerLock !== 'function') return;
+    try {
+      // 브라우저에 따라 Promise를 반환하지 않을 수도 있다.
+      const result = this.canvas.requestPointerLock();
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch { /* 거부되면 드래그 조작으로 계속한다 */ }
   }
 
   private addLook(yaw: number, pitch: number) {
@@ -55,7 +85,10 @@ export class Input {
     const jump = document.createElement('button');
     jump.className = 'jumpbtn';
     jump.textContent = '점프';
-    root.append(base, jump);
+    const dive = document.createElement('button');
+    dive.className = 'divebtn';
+    dive.textContent = '잠수';
+    root.append(base, jump, dive);
 
     const R = 55;
     let stickId = -1;
@@ -96,6 +129,15 @@ export class Input {
     jump.addEventListener('pointerup', endJump);
     jump.addEventListener('pointercancel', endJump);
 
+    dive.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      dive.setPointerCapture(e.pointerId);
+      this.diveTouch = true;
+    });
+    const endDive = () => { this.diveTouch = false; };
+    dive.addEventListener('pointerup', endDive);
+    dive.addEventListener('pointercancel', endDive);
+
     // 화면 오른쪽을 드래그하면 카메라 회전
     let lookId = -1, lx = 0, ly = 0;
     this.canvas.addEventListener('pointerdown', (e) => {
@@ -121,6 +163,10 @@ export class Input {
 
   get jumpHeld(): boolean {
     return this.keys.has('Space') || this.jumpTouch;
+  }
+
+  get diveHeld(): boolean {
+    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.diveTouch;
   }
 
   read(): InputFrame {

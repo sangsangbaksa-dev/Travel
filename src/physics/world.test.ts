@@ -148,6 +148,37 @@ describe('지형', () => {
   });
 });
 
+describe('잠수', () => {
+  const sea: Terrain = { height: () => -8, waterLevel: 0 };
+
+  it('잠수 후 바닥 아래로 내려가지 않고 스페이스로 수면에 돌아온다', () => {
+    const w = new PhysicsWorld(sea);
+    const surface = w.state.y;
+    for (let i = 0; i < 240; i++) {
+      w.step({ ...idle, diveHeld: true });
+      expect(w.state.y - HALF).toBeGreaterThanOrEqual(-8);
+    }
+    expect(w.state.submerged).toBe(true);
+    expect(w.state.y).toBeLessThan(surface - 1);
+    for (let i = 0; i < 240 && w.state.submerged; i++) w.step(hold);
+    expect(w.state.submerged).toBe(false);
+    expect(w.state.y).toBeCloseTo(surface);
+    w.step(press);
+    expect(w.state.jumped).toBe(true);
+  });
+
+  it('잠수 중 얕은 물이나 해안으로 이동해도 지형 아래로 가지 않는다', () => {
+    const shore: Terrain = { height: x => x < 1 ? -4 : 1, waterLevel: 0 };
+    const w = new PhysicsWorld(shore);
+    for (let i = 0; i < 50; i++) w.step({ ...idle, diveHeld: true });
+    for (let i = 0; i < 100; i++) {
+      w.step({ ...idle, moveX: 1, diveHeld: true });
+      expect(w.state.y - HALF).toBeGreaterThanOrEqual(shore.height(w.state.x, w.state.z));
+    }
+    expect(w.state.submerged).toBe(false);
+  });
+});
+
 describe('고정 스텝', () => {
   const stepsOver = (fps: number) => {
     const s = new FixedStepper();

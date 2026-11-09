@@ -1,11 +1,6 @@
-// 화면 UI 조작을 한곳에 모은다: 점수, 나침반, 알림, 안내 문구, 시작 화면, 소리/시간 버튼.
+// 화면 UI 조작을 한곳에 모은다.
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const scoreEl = $('score');
-const scoreN = $('scoreN');
-const compass = $('compass');
-const arrow = document.getElementById('arrow') as unknown as SVGElement;
-const distEl = $('dist');
 const placeEl = $('place');
 const toastEl = $('toast');
 const hintEl = $('hint');
@@ -18,26 +13,6 @@ let toastTimer = 0;
 
 export const hud = {
   isTouch: touch,
-
-  setScore(n: number, bump = false) {
-    scoreN.textContent = String(n);
-    if (bump) {
-      scoreEl.classList.remove('bump');
-      void scoreEl.offsetWidth; // 애니메이션을 다시 시작시킨다
-      scoreEl.classList.add('bump');
-    }
-  },
-
-  /** angleDeg: 화면 위쪽이 0도, 시계 방향. null이면 숨긴다 */
-  setCompass(angleDeg: number | null, dist = 0) {
-    if (angleDeg === null) {
-      compass.hidden = true;
-      return;
-    }
-    compass.hidden = false;
-    arrow.style.transform = `rotate(${angleDeg.toFixed(1)}deg)`;
-    distEl.textContent = `${Math.round(dist)}m`;
-  },
 
   setPlace(name: string) {
     placeEl.textContent = name;
