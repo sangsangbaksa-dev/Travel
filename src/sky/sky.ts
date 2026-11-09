@@ -40,6 +40,11 @@ export class Sky {
   readonly sunLight = new THREE.DirectionalLight('#fff0d8', 1);
   readonly moonLight = new THREE.DirectionalLight('#a9b8ff', 0);
   readonly hemi = new THREE.HemisphereLight('#fff6ec', '#a8c8a0', 1.7);
+  private readonly aurora: THREE.Mesh;
+  private readonly rainbow = new THREE.Group();
+  private readonly rainbowMats: THREE.MeshBasicMaterial[] = [];
+  private readonly uAuroraTime = { value: 0 };
+  private readonly uAuroraAlpha = { value: 0 };
   private readonly uTop = { value: new THREE.Color() };
   private readonly uHorizon = { value: new THREE.Color() };
 
@@ -92,14 +97,60 @@ export class Sky {
     this.stars.renderOrder = -9;
     this.stars.frustumCulled = false;
 
+    // 오로라: 밤하늘에 일렁이는 빛의 커튼 (카메라를 둘러싼 원통의 안쪽 면)
+    this.aurora = new THREE.Mesh(
+      new THREE.CylinderGeometry(260, 260, 110, 64, 1, true),
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
+        uniforms: { uTime: this.uAuroraTime, uAlpha: this.uAuroraAlpha },
+        vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `uniform float uTime; uniform float uAlpha; varying vec2 vUv;
+          void main(){
+            float x = vUv.x * 6.2831853;
+            float wave = sin(x * 2.0 + uTime * 0.35) * 0.5 + sin(x * 5.0 - uTime * 0.5) * 0.25;
+            float band = smoothstep(0.0, 0.3, vUv.y) * (1.0 - smoothstep(0.3 + 0.25 * wave, 1.0, vUv.y));
+            float ray = 0.6 + 0.4 * sin(x * 16.0 + uTime * 0.8);
+            float sector = smoothstep(0.35, 0.9, 0.5 + 0.5 * sin(x + 2.0));
+            vec3 c = mix(vec3(0.3, 1.0, 0.7), vec3(0.85, 0.45, 1.0), clamp(vUv.y * 1.3 + wave * 0.25, 0.0, 1.0));
+            gl_FragColor = vec4(c, band * ray * sector * uAlpha * 0.6);
+          }`,
+      }),
+    );
+    this.aurora.renderOrder = -8;
+    this.aurora.frustumCulled = false;
+
+    // 무지개: 해 반대편 하늘에 걸리는 일곱 빛깔 아치
+    ['#ff6b6b', '#ffa15c', '#ffe066', '#7fe08a', '#6cc6ff', '#7f8cff', '#c586ff'].forEach((color, i) => {
+      const m = new THREE.Mesh(
+        new THREE.RingGeometry(66 - i * 3.4, 69.2 - i * 3.4, 64, 1, 0, Math.PI),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, fog: false }),
+      );
+      m.renderOrder = -6;
+      this.rainbowMats.push(m.material as THREE.MeshBasicMaterial);
+      this.rainbow.add(m);
+    });
+    this.rainbow.frustumCulled = false;
+
+    scene.add(this.aurora, this.rainbow);
     scene.add(this.dome, this.sunGlow, this.sunCore, this.moonGlow, this.moon, this.stars);
     scene.add(this.sunLight, this.moonLight, this.hemi);
     if (!scene.fog) scene.fog = new THREE.Fog('#dff1ff', 30, 92);
   }
 
-  update(camera: THREE.Camera, s: SkyState) {
+  update(camera: THREE.Camera, s: SkyState, time = 0) {
     const p = camera.position;
     for (const o of [this.dome, this.stars]) o.position.copy(p);
+    this.aurora.position.set(p.x, p.y + 70, p.z);
+    this.uAuroraTime.value = time;
+    this.uAuroraAlpha.value = Math.max(0, s.stars - 0.3) / 0.7;
+
+    // 무지개는 해가 낮게 떠 있는 낮에, 해의 반대편에 나타난다
+    const sunLow = THREE.MathUtils.smoothstep(s.elevation, 0.1, 0.3) * (1 - THREE.MathUtils.smoothstep(s.elevation, 0.55, 0.85));
+    for (const m of this.rainbowMats) m.opacity = 0.42 * sunLow;
+    this.rainbow.visible = sunLow > 0.01;
+    const hl = Math.hypot(s.sunDir[0], s.sunDir[2]) || 1;
+    this.rainbow.position.set(p.x - (s.sunDir[0] / hl) * 210, p.y - 12, p.z - (s.sunDir[2] / hl) * 210);
+    this.rainbow.lookAt(p);
 
     this.uTop.value.setRGB(...s.top);
     this.uHorizon.value.setRGB(...s.horizon);

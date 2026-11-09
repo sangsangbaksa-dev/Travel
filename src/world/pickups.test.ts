@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTerrain, WATER_LEVEL } from '../terrain/height';
 import { generateChunkPickups, PickupField } from './pickups';
-import { CHUNK } from './scatter';
+import { CHUNK, RUNE_STAR_HEIGHT, STARTER_RUNE } from './scatter';
 import { nextDegree, noteFreq } from '../audio/notes';
 
 const t = createTerrain(1337);
@@ -30,12 +30,24 @@ describe('별 조각', () => {
         }
         const ground = Math.max(t.height(p.x, p.z), WATER_LEVEL);
         expect(p.y - ground).toBeGreaterThan(0.9);
-        expect(p.y - ground).toBeLessThanOrEqual(3.4); // 점프 최고점(중심 +2.9)에서 닿는다
-        expect(t.height(p.x, p.z)).toBeGreaterThan(WATER_LEVEL - 1.5);
+        // 점프 최고점(중심 +2.9)에서 닿는다. 마법진 위의 별은 발사되어야 닿는다.
+        if (!p.id.startsWith('r')) expect(p.y - ground).toBeLessThanOrEqual(3.4);
       }
     }
-    expect(count / 289).toBeGreaterThan(0.8); // 청크당 평균 1개 이상
+    expect(count / 289).toBeGreaterThan(0.5); // 바다 청크는 드물어서 평균은 조금 낮다
     expect(big).toBeGreaterThan(5);
+  });
+
+  it('시작 지점의 마법진 위에 큰 별이 떠 있다', () => {
+    const f = new PickupField(t, new Set());
+    const [rx, rz] = STARTER_RUNE;
+    let found: { y: number; value: number } | null = null;
+    f.forEachNear(rx, rz, 1, (p) => {
+      if (p.id.startsWith('r') && Math.hypot(p.x - rx, p.z - rz) < 0.01) found = p;
+    });
+    expect(found).not.toBeNull();
+    expect(found!.value).toBe(3);
+    expect(found!.y - t.height(rx, rz)).toBeCloseTo(RUNE_STAR_HEIGHT, 5);
   });
 
   it('먹은 별은 한 번만 먹히고 다시 나오지 않는다', () => {

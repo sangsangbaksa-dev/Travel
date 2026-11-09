@@ -28,6 +28,8 @@ export interface Obstacle {
   z: number;
   r: number;
   top: number;
+  /** 마법진: 밟으면 점프 속도의 몇 배로 쏘아 올린다 */
+  launch?: number;
 }
 export interface ObstacleSource {
   near(x: number, z: number): readonly Obstacle[];
@@ -65,6 +67,10 @@ export interface PhysicsState {
   /** 이번 스텝에 일어난 일 (연출용). 매 스텝 초기화된다. */
   jumped: boolean;
   landImpact: number;
+  /** 이번 스텝에 마법진에서 발사되었는가 */
+  launched: boolean;
+  /** 발사 중에는 버튼을 떼도 높이가 깎이지 않는다 */
+  noCut: boolean;
 }
 
 export class PhysicsWorld {
@@ -88,7 +94,7 @@ export class PhysicsWorld {
       grounded: true, onSteep: false, inWater: this.sampledWater, groundY: g,
       coyote: COYOTE_TIME, buffer: 0,
       px: x, py: y, pz: z,
-      jumped: false, landImpact: 0,
+      jumped: false, landImpact: 0, launched: false, noCut: false,
     };
   }
 
@@ -119,7 +125,9 @@ export class PhysicsWorld {
     const s = this.state;
     s.px = s.x; s.py = s.y; s.pz = s.z;
     s.jumped = false;
+    s.launched = false;
     s.landImpact = 0;
+    if (s.vy <= 0) s.noCut = false;
 
     // 1) 수평 이동: 목표 속도를 향해 가속/마찰
     const inLen = Math.hypot(input.moveX, input.moveZ);
@@ -156,7 +164,7 @@ export class PhysicsWorld {
 
     // 4) 중력 (상승 중 버튼을 떼면 더 강하게 → 가변 점프 높이)
     let g = GRAVITY;
-    if (s.vy > 0 && !input.jumpHeld) g *= CUT_MULT;
+    if (s.vy > 0 && !input.jumpHeld && !s.noCut) g *= CUT_MULT;
     else if (s.vy < 0) g *= FALL_MULT;
     const vyOld = s.vy;
     s.vy = Math.max(-TERMINAL_V, s.vy - g * dt);
@@ -205,6 +213,21 @@ export class PhysicsWorld {
       s.grounded = true;
     } else {
       s.grounded = false;
+    }
+
+    // 6.5) 마법진: 위에 서 있으면 하늘로 쏘아 올린다
+    if (this.obstacles && s.grounded && !s.inWater) {
+      for (const o of this.obstacles.near(s.x, s.z)) {
+        if (o.launch && Math.hypot(s.x - o.x, s.z - o.z) < o.r) {
+          s.vy = JUMP_SPEED * o.launch;
+          s.grounded = false;
+          s.coyote = 0;
+          s.buffer = 0;
+          s.noCut = true;
+          s.launched = true;
+          break;
+        }
+      }
     }
 
     // 7) 너무 가파른 비탈은 미끄러진다 (점프도 못 함)

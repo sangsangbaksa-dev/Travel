@@ -1,10 +1,25 @@
+import { biomeWeights, dominantBiome, type Climate } from '../terrain/biome';
 import { noise2, surfaceNormal, type Terrain } from '../terrain/height';
 
-// 청크별 나무/바위 배치. 좌표와 시드만으로 결정되므로
+// 청크별 나무/바위/선인장 배치. 좌표와 시드만으로 결정되므로
 // 렌더링과 물리가 같은 결과를 공유하고, 어디서든 같은 월드가 나온다.
 export const CHUNK = 32;
 
-export type ObjKind = 'tree' | 'rock';
+export type ObjKind = 'tree' | 'rock' | 'rune' | 'float';
+
+/** 나무 모양/색 변형 */
+export const VARIANT = {
+  green: 0, pink: 1, orange: 2, pine: 3, palm: 4, cactus: 5,
+  crystalViolet: 6, crystalCyan: 7, crystalPink: 8, mushroomRed: 9, mushroomBlue: 10,
+} as const;
+export const VARIANT_COUNT = 11;
+
+/** 마법진 점프 패드의 발사 배율 (점프 속도의 몇 배인가) */
+export const RUNE_LAUNCH = 1.75;
+/** 마법진 위에 떠 있는 큰 별의 높이 (마법진 지면 기준) */
+export const RUNE_STAR_HEIGHT = 7.2;
+/** 시작 지점 가까이에 둔 첫 마법진 */
+export const STARTER_RUNE: [number, number] = [12, -8];
 
 export interface WorldObj {
   kind: ObjKind;
@@ -14,12 +29,16 @@ export interface WorldObj {
   y: number;
   scale: number;
   rot: number;
-  /** 나무 색 변형 (0=초록, 1=분홍 벚꽃) */
+  /** 나무 변형 (VARIANT 참고). 바위는 0 */
   variant: number;
+  /** 생태계 번호 (BIOMES 순서). 바위 색 등에 쓴다 */
+  biome: number;
   /** 충돌 반지름 */
   r: number;
   /** 위에 설 수 있는 높이. 나무는 설 수 없어서 Infinity */
   top: number;
+  /** 마법진: 밟으면 위로 쏘아 올리는 배율 */
+  launch?: number;
 }
 
 export function mulberry32(a: number) {
@@ -38,12 +57,43 @@ const smoothstep = (a: number, b: number, x: number) => {
 };
 
 export const SPAWN_CLEAR = 7;
+const DEFAULT_CLIMATE: Climate = { temp: 0.1, moist: -0.25, magic: 0, kind: 0 };
+
+// 생태계별 나무 밀도: 기본 + 숲 계수 * 숲 노이즈
+const DENSITY: [number, number][] = [
+  [0.05, 0.6], // meadow
+  [0.1, 0.7], // blossom
+  [0.1, 0.65], // autumn
+  [0.03, 0.14], // desert (선인장은 드문드문)
+  [0.08, 0.5], // tropical
+  [0.08, 0.6], // snow
+  [0.12, 0.6], // crystal
+  [0.12, 0.65], // mushroom
+];
+
+function pickVariant(biome: number, roll: number): number {
+  switch (biome) {
+    case 0: return roll < 0.18 ? VARIANT.pink : VARIANT.green;
+    case 1: return roll < 0.85 ? VARIANT.pink : VARIANT.green;
+    case 2: return roll < 0.85 ? VARIANT.orange : VARIANT.green;
+    case 3: return VARIANT.cactus;
+    case 4: return VARIANT.palm;
+    case 5: return VARIANT.pine;
+    case 6: return roll < 0.4 ? VARIANT.crystalViolet : roll < 0.75 ? VARIANT.crystalCyan : VARIANT.crystalPink;
+    default: return roll < 0.55 ? VARIANT.mushroomRed : VARIANT.mushroomBlue;
+  }
+}
 
 export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 1337): WorldObj[] {
   const rnd = mulberry32(Math.imul(cx, 73856093) ^ Math.imul(cz, 19349663) ^ Math.imul(seed, 83492791));
   const water = t.waterLevel ?? -Infinity;
   const out: WorldObj[] = [];
   const n = { x: 0, y: 1, z: 0 };
+
+  if (Math.floor(STARTER_RUNE[0] / CHUNK) === cx && Math.floor(STARTER_RUNE[1] / CHUNK) === cz) {
+    const [sx, sz] = STARTER_RUNE;
+    out.push({ kind: 'rune', x: sx, z: sz, y: t.height(sx, sz), scale: 1, rot: 0, variant: 0, biome: 0, r: 1.3, top: -Infinity, launch: RUNE_LAUNCH });
+  }
 
   for (let i = 0; i < 48; i++) {
     // 난수는 항상 같은 순서로 소비해서 중간에 건너뛰어도 결과가 안정적이다
@@ -61,26 +111,61 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
     surfaceNormal(t, x, z, n);
     if (n.y < 0.88) continue;
 
+    const biome = dominantBiome(t.climate ? t.climate(x, z) : DEFAULT_CLIMATE);
+
     let obj: WorldObj;
     if (kindRoll < 0.12) {
       if (accept > 0.4) continue;
       const scale = 0.7 + scaleRoll * 1.1;
-      obj = { kind: 'rock', x, z, y, scale, rot, variant: 0, r: 0.8 * scale, top: y + 0.55 * scale };
+      obj = { kind: 'rock', x, z, y, scale, rot, variant: 0, biome, r: 0.8 * scale, top: y + 0.55 * scale };
     } else {
+      if (y > 16) continue; // 산꼭대기에는 나무가 없다
       const forest = smoothstep(-0.05, 0.35, noise2(x * 0.02, z * 0.02, seed + 9));
-      if (accept > 0.05 + 0.6 * forest) continue;
-      const scale = 0.8 + scaleRoll * 0.8;
-      obj = {
-        kind: 'tree', x, z, y, scale, rot,
-        variant: variantRoll < 0.22 ? 1 : 0,
-        r: 0.32 * scale, top: Infinity,
-      };
+      const [base, k] = DENSITY[biome];
+      if (accept > base + k * forest) continue;
+      const variant = pickVariant(biome, variantRoll);
+      const magical = variant >= VARIANT.crystalViolet;
+      const scale = variant === VARIANT.pine ? 1.0 + scaleRoll * 0.7 : magical ? 0.9 + scaleRoll * 1.1 : 0.8 + scaleRoll * 0.8;
+      const r =
+        variant === VARIANT.cactus ? 0.35 * scale
+        : variant === VARIANT.palm ? 0.28 * scale
+        : variant <= VARIANT.crystalPink && variant >= VARIANT.crystalViolet ? 0.5 * scale
+        : variant >= VARIANT.mushroomRed ? 0.3 * scale
+        : 0.32 * scale;
+      obj = { kind: 'tree', x, z, y, scale, rot, variant, biome, r, top: Infinity };
     }
     if (out.some((o) => Math.hypot(o.x - obj.x, o.z - obj.z) < o.r + obj.r + 0.8)) continue;
     out.push(obj);
   }
+
+  // 마법 요소: 마법진 점프 패드와 떠다니는 섬. 마법 지대에서 훨씬 자주 나온다.
+  const rnd2 = mulberry32(Math.imul(cx, 15485863) ^ Math.imul(cz, 32452843) ^ Math.imul(seed, 49979687));
+  for (let i = 0; i < 2; i++) {
+    const x = (cx + rnd2()) * CHUNK;
+    const z = (cz + rnd2()) * CHUNK;
+    const runeRoll = rnd2();
+    const floatRoll = rnd2();
+    const hover = rnd2();
+    const rot = rnd2() * Math.PI * 2;
+    if (Math.hypot(x, z) < SPAWN_CLEAR + 4) continue;
+    const y = t.height(x, z);
+    if (y < water + 0.8) continue;
+    const biome = dominantBiome(t.climate ? t.climate(x, z) : DEFAULT_CLIMATE);
+    const magic = biome >= 6 ? 1 : 0;
+    surfaceNormal(t, x, z, n);
+
+    if (runeRoll < 0.04 + 0.3 * magic && n.y > 0.9) {
+      const o: WorldObj = { kind: 'rune', x, z, y, scale: 1, rot, variant: 0, biome, r: 1.3, top: -Infinity, launch: RUNE_LAUNCH };
+      if (!out.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + o.r + 0.8)) out.push(o);
+    } else if (floatRoll < 0.04 + 0.32 * magic) {
+      const o: WorldObj = { kind: 'float', x, z, y: y + 7 + hover * 6, scale: 1 + hover * 0.9, rot, variant: 0, biome, r: 0, top: -Infinity };
+      if (!out.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + 0.8)) out.push(o);
+    }
+  }
   return out;
 }
+
+export { biomeWeights };
 
 export class ObjectCache {
   private readonly cache = new Map<string, WorldObj[]>();

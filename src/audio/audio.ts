@@ -132,6 +132,11 @@ export class GameAudio {
     this.tone(150, 0.14, 'sine', v, 60);
     this.burst(0.08, v * 0.5, 'lowpass', 900, 300);
   }
+  launch() {
+    this.tone(180, 0.55, 'sawtooth', 0.07, 1400);
+    this.tone(360, 0.6, 'sine', 0.12, 1800);
+    [1046, 1318, 1568, 2093].forEach((f, i) => this.tone(f, 0.4, 'triangle', 0.08, undefined, 0.15 + i * 0.08));
+  }
   step() { this.burst(0.035, 0.035, 'bandpass', 1100, 700); }
   splash() {
     this.burst(0.4, 0.22, 'lowpass', 3200, 500);

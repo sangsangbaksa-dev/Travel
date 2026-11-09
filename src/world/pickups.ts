@@ -1,5 +1,5 @@
 import type { Terrain } from '../terrain/height';
-import { CHUNK, generateChunkObjects, mulberry32 } from './scatter';
+import { CHUNK, generateChunkObjects, mulberry32, RUNE_STAR_HEIGHT } from './scatter';
 
 // 별 조각 배치. 청크 좌표와 시드만으로 정해지므로 어디서든 같은 별이 같은 자리에 있다.
 export interface Pickup {
@@ -25,14 +25,24 @@ export function generateChunkPickups(t: Terrain, cx: number, cz: number, seed = 
     }
   });
 
-  const trees = generateChunkObjects(t, cx, cz, seed).filter((o) => o.kind === 'tree');
+  const objs = generateChunkObjects(t, cx, cz, seed);
+  // 마법진 위에는 발사되어야 닿는 큰 별이 떠 있다
+  objs.filter((o) => o.kind === 'rune').forEach((o, k) => {
+    out.push({ id: `r${cx},${cz},${k}`, x: o.x, z: o.z, y: o.y + RUNE_STAR_HEIGHT, value: 3, big: true });
+  });
+  const trees = objs.filter((o) => o.kind === 'tree');
   const n = 1 + (rnd() < 0.45 ? 1 : 0);
   for (let i = 0; i < n; i++) {
     const x = (cx + rnd()) * CHUNK;
     const z = (cz + rnd()) * CHUNK;
     const roll = rnd();
+    const seaRoll = rnd();
     const h = t.height(x, z);
-    if (h < water - 1.5) continue; // 깊은 호수 한가운데는 건너뛴다
+    if (h < water - 1.5) {
+      // 바다/호수 한가운데: 가끔만 수면 위에 띄운다
+      if (seaRoll < 0.3) out.push({ id: `${cx},${cz},${i}`, x, z, y: water + 1.1, value: 1, big: false });
+      continue;
+    }
     if (Math.hypot(x, z) < 6) continue;
     if (trees.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + 0.9)) continue;
     const base = Math.max(h, water);

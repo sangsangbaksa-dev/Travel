@@ -9,8 +9,9 @@ import { HALF, PhysicsWorld, type PhysicsInput } from './physics/world';
 import { Clouds } from './sky/clouds';
 import { sampleSky } from './sky/cycle';
 import { Sky } from './sky/sky';
-import { createTerrain, surfaceNormal } from './terrain/height';
-import { ChunkManager } from './world/chunks';
+import { BASE_BIOMES, BIOME_NAMES, BIOMES, dominantBiome } from './terrain/biome';
+import { createTerrain, surfaceNormal, terrainInfo } from './terrain/height';
+import { ChunkManager, setMagicGlow } from './world/chunks';
 import { PickupField } from './world/pickups';
 import { ObjectCache, CHUNK } from './world/scatter';
 import { StarField } from './world/stars';
@@ -122,6 +123,10 @@ let stepDist = 0;
 let compassT = 0;
 let pruneT = 0;
 let target: { x: number; z: number; dist: number } | null = null;
+let placeT = 0;
+let placeName = '';
+let fireflyT = 0;
+let firstLaunch = true;
 let fpsCount = 0;
 let emaDt = 1 / 60;
 let prTimer = -5; // 시작 직후의 셰이더 컴파일 끊김은 무시한다
@@ -129,6 +134,14 @@ const MILESTONES = [5, 15, 30, 60, 100, 200, 400];
 
 const DUST = '#f1e8cc';
 const SPLASH = '#dff6ff';
+
+/** 지금 서 있는 곳의 이름 */
+function placeAt(x: number, z: number, y: number, inWater: boolean): string {
+  if (inWater) return terrainInfo(x, z, 1337).landness < 0.6 ? '바다' : '강·호수';
+  if (y > 14) return '산악 지대';
+  const b = dominantBiome(terrain.climate!(x, z));
+  return BIOME_NAMES[BIOMES[b]];
+}
 
 function collectStars() {
   const s = physics.state;
@@ -139,7 +152,7 @@ function collectStars() {
     score += g.value;
     particles.emit(g.x, g.y, g.z, g.big ? 24 : 12, { color: '#ffe27a', speed: 3, up: 3.5, size: 0.14, life: 0.75, gravity: 5 });
     audio.collect(g.value);
-    if (g.big) hud.toast('큰 별 조각! +5');
+    if (g.big) hud.toast(`큰 별 조각! +${g.value}`);
   }
   hud.setScore(score, true);
   const hit = MILESTONES.find((m) => before < m && score >= m);
@@ -205,6 +218,15 @@ function frame(now: number) {
     audio.jump();
     particles.emit(s.x, feetY, s.z, s.inWater ? 8 : 5, { color: s.inWater ? SPLASH : DUST, speed: 1.6, up: 2, size: 0.1 });
   }
+  if (s.launched) {
+    cube.kickJump();
+    audio.launch();
+    particles.emit(s.x, feetY, s.z, 24, { color: '#c9a8ff', speed: 3.2, up: 7, size: 0.16, life: 0.9, gravity: 6 });
+    if (firstLaunch) {
+      firstLaunch = false;
+      hud.toast('마법진! 하늘 높이 날아가요', 2600);
+    }
+  }
   if (landImpact > 2) {
     cube.kickLand(landImpact);
     if (s.inWater) {
@@ -241,6 +263,15 @@ function frame(now: number) {
     hud.setCompass(deg, Math.hypot(dx, dz));
   } else {
     hud.setCompass(null);
+  }
+  placeT -= dt;
+  if (placeT <= 0) {
+    placeT = 0.5;
+    const name = placeAt(s.x, s.z, s.y, s.inWater);
+    if (name !== placeName) {
+      placeName = name;
+      hud.setPlace(name);
+    }
   }
   pruneT -= dt;
   if (pruneT <= 0) {
@@ -288,7 +319,25 @@ function frame(now: number) {
   camera.lookAt(camTarget.x, camTarget.y + 1.1, camTarget.z);
 
   const skyState = sampleSky(timeOfDay);
-  sky.update(camera, skyState);
+  const night = THREE.MathUtils.clamp((0.1 - skyState.elevation) / 0.3, 0, 1);
+  setMagicGlow(night);
+  chunks.animate(time);
+
+  // 밤의 반딧불: 마법 지대에서는 더 많고 색이 다르다
+  if (started && night > 0.3) {
+    fireflyT -= dt;
+    if (fireflyT <= 0) {
+      const biome = dominantBiome(terrain.climate!(s.x, s.z));
+      const magical = biome >= BASE_BIOMES;
+      fireflyT = magical ? 0.07 : 0.22;
+      const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 9;
+      const fx2 = s.x + Math.cos(a) * r, fz2 = s.z + Math.sin(a) * r;
+      const fy = Math.max(terrain.height(fx2, fz2), waterLevel) + 0.6 + Math.random() * 2.2;
+      const color = biome === 6 ? '#9ff0ff' : biome === 7 ? '#ffb4f0' : '#fff6a8';
+      particles.emit(fx2, fy, fz2, 1, { color, speed: 0.5, up: 0.4, size: 0.09, life: 4, gravity: 0 });
+    }
+  }
+  sky.update(camera, skyState, time);
   clouds.update(camera, time, skyState);
   water.update(camera.position.x, camera.position.z, time, Math.min(1, skyState.sunIntensity / 1.25 + skyState.moonIntensity * 0.3));
   if (started) audio.update(dt, { elevation: skyState.elevation, speed, grounded: s.grounded });

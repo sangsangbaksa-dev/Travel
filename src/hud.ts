@@ -6,6 +6,7 @@ const scoreN = $('scoreN');
 const compass = $('compass');
 const arrow = document.getElementById('arrow') as unknown as SVGElement;
 const distEl = $('dist');
+const placeEl = $('place');
 const toastEl = $('toast');
 const hintEl = $('hint');
 const startEl = $('start');
@@ -36,6 +37,10 @@ export const hud = {
     compass.hidden = false;
     arrow.style.transform = `rotate(${angleDeg.toFixed(1)}deg)`;
     distEl.textContent = `${Math.round(dist)}m`;
+  },
+
+  setPlace(name: string) {
+    placeEl.textContent = name;
   },
 
   toast(msg: string, ms = 2200) {
