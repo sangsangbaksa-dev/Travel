@@ -14,6 +14,7 @@ import { createTerrain, surfaceNormal, terrainInfo } from './terrain/height';
 import { ChunkManager } from './world/chunks';
 import { CreatureField } from './world/creatures';
 import { FishSchools } from './world/fish';
+import { DeepSea } from './world/deepSea';
 import { Residents } from './world/residents';
 import { Realms } from './world/realms';
 import { RealmCreatures } from './world/realmCreatures';
@@ -50,10 +51,11 @@ const realms = new Realms(scene, terrain);
 const realmCreatures = new RealmCreatures(realms.terrain);
 const creatures = new CreatureField(terrain);
 const fish = new FishSchools(terrain);
+const deepSea = new DeepSea(terrain);
 const residents = new Residents(terrain);
 const settlements = new Settlements(terrain);
 scene.add(creatures.group, residents.group, settlements.group, realmCreatures.group);
-scene.add(fish.mesh);
+scene.add(fish.mesh, deepSea.group);
 const physics = new PhysicsWorld(realms.terrain, 0, 0, {
   near: (x, z) => realms.mode === 'surface' ? objects.near(x, z) : [],
 });
@@ -79,7 +81,7 @@ hud.onFast(() => {
 
 // ---------- 카메라/입력 ----------
 const input = new Input(renderer.domElement, app);
-const minimap = new Minimap(app);
+const minimap = new Minimap(app, deepSea.site);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
 let camYaw = 0.6;
 let camPitch = 0.26;
@@ -128,6 +130,7 @@ let prTimer = -5; // 시작 직후의 셰이더 컴파일 끊김은 무시한다
 
 const DUST = '#f1e8cc';
 const SPLASH = '#dff6ff';
+const DEEP_WATER_COLOR = new THREE.Color('#244858');
 
 /** 지금 서 있는 곳의 이름 */
 function placeAt(x: number, z: number, y: number, inWater: boolean): string {
@@ -200,6 +203,7 @@ function frame(now: number) {
   }
   minimap.update(s.x, s.z, faceX, faceZ, dt, started && realms.mode === 'surface');
   fish.update(s.x, s.z, time, dt, started && realms.mode === 'surface' && s.submerged);
+  deepSea.update(s.x, s.z, started && realms.mode === 'surface' && s.submerged);
   const speed = Math.hypot(s.vx, s.vz);
   const feetY = s.inWater && !s.submerged ? waterLevel + 0.05 : s.groundY + 0.1;
 
@@ -312,7 +316,11 @@ function frame(now: number) {
   const inCave = realms.mode === 'cave';
   fog.near = underwaterView ? 5 : inCave ? 12 : 30;
   fog.far = underwaterView ? 38 : inCave ? 68 : 92;
-  if (underwaterView) fog.color.set('#5ea6b1');
+  if (underwaterView) {
+    const depth = THREE.MathUtils.clamp((waterLevel - camera.position.y) / 20, 0, 1);
+    fog.color.set('#5ea6b1').lerp(DEEP_WATER_COLOR, depth);
+    fog.far = 38 - depth * 10;
+  }
   else if (inCave) fog.color.set('#55566a');
   clouds.mesh.visible = !inCave;
   clouds.update(camera, time, skyState);

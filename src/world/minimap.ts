@@ -1,13 +1,14 @@
 import { SETTLEMENTS } from './settlement-layout';
+import type { WreckSite } from './deepSea';
 
 /** 북쪽(-Z)이 위인 탐험 지도. 대상이 멀면 가장자리에 방향을 표시한다. */
 export class Minimap {
   readonly element = document.createElement('canvas');
   private readonly ctx: CanvasRenderingContext2D;
   private elapsed = Infinity;
-  constructor(parent: HTMLElement) {
+  constructor(parent: HTMLElement, private readonly wreck: WreckSite | null = null) {
     this.element.width = this.element.height = 240;
-    this.element.setAttribute('aria-label', '탐험 지도. 위쪽은 북쪽이며 마을, 도시, 동굴과 하늘 계단의 방향을 표시합니다.');
+    this.element.setAttribute('aria-label', '탐험 지도. 위쪽은 북쪽이며 마을, 도시, 동굴, 계단과 난파선 방향을 표시합니다.');
     this.element.setAttribute('role', 'img');
     Object.assign(this.element.style, {
       position: 'fixed', top: 'max(53px, calc(env(safe-area-inset-top, 0px) + 43px))',
@@ -38,6 +39,7 @@ export class Minimap {
       { x: -5, z: -4, label: '굴', color: '#538c86' },
       { x: 5, z: -4, label: '계', color: '#a27bb1' },
     ];
+    if (this.wreck) points.push({ ...this.wreck, label: '배', color: '#557b8c' });
     for (const point of points) {
       let dx = (point.x - x) * scale, dz = (point.z - z) * scale;
       const d = Math.hypot(dx, dz), max = radius - 17;
