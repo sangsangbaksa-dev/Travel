@@ -6,7 +6,9 @@ import { HALF, PhysicsWorld, type PhysicsInput } from './physics/world';
 import { sampleSky } from './sky/cycle';
 import { Sky } from './sky/sky';
 import { createTerrain, surfaceNormal } from './terrain/height';
-import { TerrainMesh } from './terrain/mesh';
+import { ChunkManager } from './world/chunks';
+import { ObjectCache } from './world/scatter';
+import { Water } from './world/water';
 
 const app = document.getElementById('app')!;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -31,10 +33,15 @@ timeBtn.addEventListener('click', toggleFast);
 addEventListener('keydown', (e) => { if (e.code === 'KeyT' && !e.repeat) toggleFast(); });
 
 const terrain = createTerrain(1337);
-const terrainMesh = new TerrainMesh(terrain);
-scene.add(terrainMesh.mesh);
+const objects = new ObjectCache(terrain);
+const chunks = new ChunkManager(terrain, objects);
+chunks.prime(0, 0, 2);
+scene.add(chunks.group);
+const waterLevel = terrain.waterLevel ?? -Infinity;
+const water = new Water(waterLevel);
+scene.add(water.mesh);
 
-const physics = new PhysicsWorld(terrain, 0, 0);
+const physics = new PhysicsWorld(terrain, 0, 0, objects);
 const cube = new Cube();
 scene.add(cube.group, cube.shadow);
 
@@ -99,12 +106,18 @@ function frame(now: number) {
     s.pz + (s.z - s.pz) * alpha,
   );
 
-  const groundY = terrain.height(pos.x, pos.z);
-  surfaceNormal(terrain, pos.x, pos.z, nTmp);
-  normal.set(nTmp.x, nTmp.y, nTmp.z);
+  // 그림자/기울기: 물 위나 바위 위에서는 수평으로, 그 외에는 지형 법선을 따른다
+  const terrH = terrain.height(pos.x, pos.z);
+  const groundY = s.inWater ? waterLevel - 0.01 : s.groundY;
+  if (s.inWater || s.groundY > terrH + 0.05) normal.set(0, 1, 0);
+  else {
+    surfaceNormal(terrain, pos.x, pos.z, nTmp);
+    normal.set(nTmp.x, nTmp.y, nTmp.z);
+  }
+  if (s.inWater) pos.y += Math.sin(now / 380) * 0.04; // 물 위에서 살짝 출렁
 
   timeOfDay = (timeOfDay + (dt / DAY_SECONDS) * (fast ? FAST : 1)) % 1;
-  terrainMesh.update(pos.x, pos.z);
+  chunks.update(pos.x, pos.z);
   cube.update(dt, pos, s.vy, s.grounded, groundY, faceX, faceZ, normal);
 
   // 추적 카메라: 높이는 천천히, 수평은 빠르게 따라간다
@@ -119,10 +132,11 @@ function frame(now: number) {
     camTarget.y + 1.2 + Math.sin(camPitch) * CAM_DIST,
     camTarget.z + Math.cos(camYaw) * cp * CAM_DIST,
   );
-  const minY = terrain.height(camera.position.x, camera.position.z) + 1;
+  const minY = Math.max(terrain.height(camera.position.x, camera.position.z), waterLevel) + 1;
   if (camera.position.y < minY) camera.position.y = minY;
   camera.lookAt(camTarget.x, camTarget.y + 1.1, camTarget.z);
 
+  water.follow(camera.position.x, camera.position.z);
   sky.update(camera, sampleSky(timeOfDay));
   renderer.render(scene, camera);
   fpsCount++;
@@ -136,4 +150,12 @@ requestAnimationFrame(frame);
 (window as unknown as Record<string, unknown>).__cube = {
   state: () => ({ ...physics.state, half: HALF, frames: fpsCount, timeOfDay }),
   setTime: (t: number) => { timeOfDay = t; },
+  chunks: () => chunks.count,
+  teleport: (x: number, z: number) => {
+    const st = physics.state;
+    st.x = st.px = x; st.z = st.pz = z;
+    st.y = st.py = Math.max(terrain.height(x, z), waterLevel) + 4;
+    st.vx = st.vy = st.vz = 0;
+    camTarget.set(x, st.y, z);
+  },
 };

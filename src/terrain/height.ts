@@ -32,12 +32,17 @@ export function noise2(x: number, z: number, seed: number): number {
   return (a + (b - a) * v) * 1.41; // 대략 [-1, 1]
 }
 
+export const WATER_LEVEL = -2.5;
+
 export interface Terrain {
   height(x: number, z: number): number;
+  /** 수면 높이. 없으면 물이 없는 지형 */
+  waterLevel?: number;
 }
 
 export function createTerrain(seed = 1337): Terrain {
   return {
+    waterLevel: WATER_LEVEL,
     height(x: number, z: number): number {
       // 큰 언덕 + 중간 굴곡 + 잔잔한 결
       const big = noise2(x * 0.012, z * 0.012, seed) * 14;

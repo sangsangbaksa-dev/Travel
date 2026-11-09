@@ -19,6 +19,20 @@ export const SNAP_DISTANCE = 0.4; // 내리막에서 지면에 붙어 있게 하
 export const WALKABLE_NORMAL_Y = 0.62; // 이보다 가파르면 미끄러진다 (~52°)
 export const SLIDE_ACCEL = 30;
 
+export const FLOAT_DEPTH = 0.25; // 물에서 큐브 밑면이 수면 아래로 잠기는 깊이
+export const WATER_SPEED = 0.7; // 물에서의 이동 속도 배수
+
+/** 나무/바위 같은 정적 충돌체 (원기둥). top이 Infinity면 올라설 수 없다. */
+export interface Obstacle {
+  x: number;
+  z: number;
+  r: number;
+  top: number;
+}
+export interface ObstacleSource {
+  near(x: number, z: number): readonly Obstacle[];
+}
+
 export interface PhysicsInput {
   /** 월드 좌표계의 이동 방향. 길이 0~1 */
   moveX: number;
@@ -38,6 +52,10 @@ export interface PhysicsState {
   vz: number;
   grounded: boolean;
   onSteep: boolean;
+  /** 물 위에 떠 있는가 */
+  inWater: boolean;
+  /** 큐브 밑면 아래 지지면의 높이 */
+  groundY: number;
   coyote: number;
   buffer: number;
   /** 직전 스텝의 위치 (렌더 보간용) */
@@ -52,27 +70,49 @@ export interface PhysicsState {
 export class PhysicsWorld {
   readonly state: PhysicsState;
   private readonly normal = { x: 0, y: 1, z: 0 };
+  private readonly water: number;
+  private sampledWater = false;
+  private sampledRaised = false;
 
   constructor(
     private readonly terrain: Terrain,
     x = 0,
     z = 0,
+    private readonly obstacles?: ObstacleSource,
   ) {
-    const y = this.groundY(x, z) + HALF;
+    this.water = terrain.waterLevel ?? -Infinity;
+    const g = this.sample(x, z);
+    const y = g + HALF;
     this.state = {
       x, y, z, vx: 0, vy: 0, vz: 0,
-      grounded: true, onSteep: false,
+      grounded: true, onSteep: false, inWater: this.sampledWater, groundY: g,
       coyote: COYOTE_TIME, buffer: 0,
       px: x, py: y, pz: z,
       jumped: false, landImpact: 0,
     };
   }
 
-  /** 큐브 밑면 아래 지면 높이. 모서리까지 샘플링해 비탈에서 파고들지 않게 한다. */
-  private groundY(x: number, z: number): number {
-    const h = this.terrain.height.bind(this.terrain);
+  /**
+   * 큐브 밑면 아래 지지면의 높이. 모서리까지 샘플링해 비탈에서 파고들지 않게 하고,
+   * 올라설 수 있는 바위 윗면과 수면(물에 뜨는 높이)도 포함한다.
+   */
+  private sample(x: number, z: number): number {
+    const t = this.terrain;
     const r = HALF * 0.85;
-    return Math.max(h(x, z), h(x + r, z), h(x - r, z), h(x, z + r), h(x, z - r));
+    let g = Math.max(t.height(x, z), t.height(x + r, z), t.height(x - r, z), t.height(x, z + r), t.height(x, z - r));
+    this.sampledRaised = false;
+    if (this.obstacles) {
+      for (const o of this.obstacles.near(x, z)) {
+        if (o.top === Infinity || o.top <= g) continue;
+        if (Math.hypot(x - o.x, z - o.z) < o.r + HALF * 0.6) {
+          g = o.top;
+          this.sampledRaised = true;
+        }
+      }
+    }
+    const surface = this.water - FLOAT_DEPTH;
+    this.sampledWater = surface > g;
+    return this.sampledWater ? surface : g;
   }
 
   step(input: PhysicsInput, dt = FIXED_DT): void {
@@ -85,8 +125,9 @@ export class PhysicsWorld {
     const inLen = Math.hypot(input.moveX, input.moveZ);
     const hasInput = inLen > 0.001;
     const scale = hasInput ? Math.min(1, inLen) / inLen : 0;
-    const tvx = input.moveX * scale * MAX_SPEED;
-    const tvz = input.moveZ * scale * MAX_SPEED;
+    const speed = MAX_SPEED * (s.inWater && s.grounded ? WATER_SPEED : 1);
+    const tvx = input.moveX * scale * speed;
+    const tvz = input.moveZ * scale * speed;
     const accel = s.grounded ? (hasInput ? GROUND_ACCEL : GROUND_FRICTION) : AIR_ACCEL;
     const dvx = tvx - s.vx;
     const dvz = tvz - s.vz;
@@ -125,8 +166,30 @@ export class PhysicsWorld {
     s.z += s.vz * dt;
     s.y += ((vyOld + s.vy) / 2) * dt;
 
+    // 5.5) 나무/바위 옆면: 밑면이 윗면보다 낮으면 밀어낸다
+    if (this.obstacles) {
+      const feetPrev = s.py - HALF;
+      for (const o of this.obstacles.near(s.x, s.z)) {
+        if (feetPrev >= o.top - 0.1) continue;
+        let dx = s.x - o.x;
+        let dz = s.z - o.z;
+        let d = Math.hypot(dx, dz);
+        const min = o.r + HALF * 0.9;
+        if (d >= min) continue;
+        if (d < 1e-4) { dx = 1; dz = 0; d = 1; }
+        const nx = dx / d;
+        const nz = dz / d;
+        s.x = o.x + nx * min;
+        s.z = o.z + nz * min;
+        const vn = s.vx * nx + s.vz * nz;
+        if (vn < 0) { s.vx -= vn * nx; s.vz -= vn * nz; }
+      }
+    }
+
     // 6) 지면 처리
-    const ground = this.groundY(s.x, s.z) + HALF;
+    const ground = this.sample(s.x, s.z) + HALF;
+    s.inWater = this.sampledWater;
+    s.groundY = ground - HALF;
     const wasGrounded = s.grounded;
     s.onSteep = false;
     if (s.y <= ground && s.vy <= 0) {
@@ -145,7 +208,7 @@ export class PhysicsWorld {
     }
 
     // 7) 너무 가파른 비탈은 미끄러진다 (점프도 못 함)
-    if (s.grounded) {
+    if (s.grounded && !s.inWater && !this.sampledRaised) {
       const n = surfaceNormal(this.terrain, s.x, s.z, this.normal);
       if (n.y < WALKABLE_NORMAL_Y) {
         s.onSteep = true;
