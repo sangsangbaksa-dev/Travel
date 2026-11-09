@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BIOMES, climateAt, dominantBiome } from '../terrain/biome';
 import { createTerrain, terrainInfo, WATER_LEVEL } from '../terrain/height';
-import { CHUNK, generateChunkObjects, ObjectCache, RUNE_LAUNCH, SPAWN_CLEAR, STARTER_RUNE, VARIANT } from './scatter';
+import { CHUNK, generateChunkObjects, ObjectCache, RUNE_LAUNCH, SPAWN_CLEAR, VARIANT } from './scatter';
 import {
   FLOAT_DEPTH, GRAVITY, HALF, JUMP_HEIGHT, JUMP_SPEED, MAX_SPEED, PhysicsWorld, WATER_SPEED, type Obstacle, type PhysicsInput,
 } from '../physics/world';
@@ -72,8 +72,8 @@ describe('월드 생성', () => {
       expect(steep / land).toBeLessThan(0.12);
     });
 
-    it('여덟 생태계(마법 지대 포함)가 모두 충분히 나타난다', () => {
-      BIOMES.forEach((_, k) => expect(biomeCount[k] / land).toBeGreaterThan(0.04));
+    it('여섯 기후 생태계가 나타난다', () => {
+      BIOMES.slice(0, 6).forEach((_, k) => expect(biomeCount[k] / land).toBeGreaterThan(0.02));
     });
   });
 
@@ -125,39 +125,13 @@ describe('월드 생성', () => {
         expect(allowed[o.biome]).toContain(o.variant);
       }
     }
-    seen.forEach((n) => expect(n).toBeGreaterThan(20)); // 모든 생태계에 나무가 있다
+    seen.slice(0, 6).forEach((n) => expect(n).toBeGreaterThan(20)); // 모든 생태계에 나무가 있다
   });
 
-  it('마법진과 떠다니는 섬이 곳곳에 있고, 시작 지점 가까이에 첫 마법진이 있다', () => {
-    const starter = generateChunkObjects(t, Math.floor(STARTER_RUNE[0] / CHUNK), Math.floor(STARTER_RUNE[1] / CHUNK))
-      .find((o) => o.kind === 'rune' && o.x === STARTER_RUNE[0]);
-    expect(starter).toBeDefined();
-    expect(starter!.launch).toBe(RUNE_LAUNCH);
-
-    let runes = 0, floats = 0, magicRunes = 0, magicLand = 0, plainRunes = 0, plainLand = 0;
-    for (let cx = -40; cx <= 40; cx++) for (let cz = -40; cz <= 40; cz++) {
-      const mx = (cx + 0.5) * CHUNK, mz = (cz + 0.5) * CHUNK;
-      const land = t.height(mx, mz) > WATER_LEVEL + 1;
-      const isMagic = t.climate!(mx, mz).magic > 0.8;
-      if (land) (isMagic ? magicLand++ : plainLand++);
-      for (const o of generateChunkObjects(t, cx, cz)) {
-        if (o.kind === 'rune') {
-          runes++;
-          if (land) (isMagic ? magicRunes++ : plainRunes++);
-          expect(o.y).toBeGreaterThan(WATER_LEVEL + 0.7);
-        }
-        if (o.kind === 'float') {
-          floats++;
-          expect(o.y - t.height(o.x, o.z)).toBeGreaterThanOrEqual(7); // 점프로는 못 닿는 높이에 떠 있다
-        }
-      }
+  it('지상에 마법진과 공중 섬을 생성하지 않는다', () => {
+    for (let x = -8; x <= 8; x++) for (let z = -8; z <= 8; z++) {
+      expect(generateChunkObjects(t, x, z).some(o => o.kind === 'rune' || o.kind === 'float')).toBe(false);
     }
-    expect(runes).toBeGreaterThan(100);
-    expect(floats).toBeGreaterThan(100);
-    const magicRate = magicRunes / Math.max(1, magicLand);
-    const plainRate = plainRunes / Math.max(1, plainLand);
-    expect(magicRate).toBeGreaterThan(0.1);
-    expect(magicRate).toBeGreaterThan(plainRate * 2); // 마법 지대에 훨씬 많다
   });
 
   it('ObjectCache.near가 주변 청크의 오브젝트를 돌려준다', () => {

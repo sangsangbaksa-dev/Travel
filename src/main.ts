@@ -9,9 +9,9 @@ import { HALF, PhysicsWorld, type PhysicsInput } from './physics/world';
 import { Clouds } from './sky/clouds';
 import { sampleSky } from './sky/cycle';
 import { Sky } from './sky/sky';
-import { BASE_BIOMES, BIOME_NAMES, BIOMES, dominantBiome } from './terrain/biome';
+import { BIOME_NAMES, BIOMES, dominantBiome } from './terrain/biome';
 import { createTerrain, surfaceNormal, terrainInfo } from './terrain/height';
-import { ChunkManager, setMagicGlow } from './world/chunks';
+import { ChunkManager } from './world/chunks';
 import { CreatureField } from './world/creatures';
 import { FishSchools } from './world/fish';
 import { Residents } from './world/residents';
@@ -122,7 +122,6 @@ let stepDist = 0;
 let placeT = 0;
 let placeName = '';
 let fireflyT = 0;
-let firstLaunch = true;
 let fpsCount = 0;
 let emaDt = 1 / 60;
 let prTimer = -5; // 시작 직후의 셰이더 컴파일 끊김은 무시한다
@@ -133,7 +132,7 @@ const SPLASH = '#dff6ff';
 /** 지금 서 있는 곳의 이름 */
 function placeAt(x: number, z: number, y: number, inWater: boolean): string {
   if (realms.mode === 'cave') return '지하 동굴';
-  if (realms.mode === 'sky') return '하늘 정원';
+  if (realms.mode === 'sky') return '고산 지대';
   const settlement = settlementNameAt(x, z);
   if (settlement) return settlement;
   if (inWater) return terrainInfo(x, z, 1337).landness < 0.6 ? '바다' : '강·호수';
@@ -209,15 +208,6 @@ function frame(now: number) {
     cube.kickJump();
     audio.jump();
     particles.emit(s.x, feetY, s.z, s.inWater ? 8 : 5, { color: s.inWater ? SPLASH : DUST, speed: 1.6, up: 2, size: 0.1 });
-  }
-  if (s.launched) {
-    cube.kickJump();
-    audio.launch();
-    particles.emit(s.x, feetY, s.z, 24, { color: '#c9a8ff', speed: 3.2, up: 7, size: 0.16, life: 0.9, gravity: 6 });
-    if (firstLaunch) {
-      firstLaunch = false;
-      hud.toast('마법진! 하늘 높이 날아가요', 2600);
-    }
   }
   if (landImpact > 2) {
     cube.kickLand(landImpact);
@@ -302,21 +292,17 @@ function frame(now: number) {
 
   const skyState = sampleSky(timeOfDay);
   const night = THREE.MathUtils.clamp((0.1 - skyState.elevation) / 0.3, 0, 1);
-  setMagicGlow(night);
   chunks.animate(time);
 
   // 밤의 반딧불: 마법 지대에서는 더 많고 색이 다르다
   if (started && night > 0.3 && realms.mode === 'surface') {
     fireflyT -= dt;
     if (fireflyT <= 0) {
-      const biome = dominantBiome(terrain.climate!(s.x, s.z));
-      const magical = biome >= BASE_BIOMES;
-      fireflyT = magical ? 0.07 : 0.22;
+      fireflyT = 0.35;
       const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 9;
       const fx2 = s.x + Math.cos(a) * r, fz2 = s.z + Math.sin(a) * r;
       const fy = Math.max(terrain.height(fx2, fz2), waterLevel) + 0.6 + Math.random() * 2.2;
-      const color = biome === 6 ? '#9ff0ff' : biome === 7 ? '#ffb4f0' : '#fff6a8';
-      particles.emit(fx2, fy, fz2, 1, { color, speed: 0.5, up: 0.4, size: 0.09, life: 4, gravity: 0 });
+      particles.emit(fx2, fy, fz2, 1, { color: '#fff6a8', speed: 0.5, up: 0.4, size: 0.09, life: 4, gravity: 0 });
     }
   }
   sky.update(camera, skyState, time);

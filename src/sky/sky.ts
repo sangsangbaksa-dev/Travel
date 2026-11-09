@@ -142,12 +142,12 @@ export class Sky {
     for (const o of [this.dome, this.stars]) o.position.copy(p);
     this.aurora.position.set(p.x, p.y + 70, p.z);
     this.uAuroraTime.value = time;
-    this.uAuroraAlpha.value = Math.max(0, s.stars - 0.3) / 0.7;
+    this.uAuroraAlpha.value = 0;
 
     // 무지개는 해가 낮게 떠 있는 낮에, 해의 반대편에 나타난다
     const sunLow = THREE.MathUtils.smoothstep(s.elevation, 0.1, 0.3) * (1 - THREE.MathUtils.smoothstep(s.elevation, 0.55, 0.85));
     for (const m of this.rainbowMats) m.opacity = 0.42 * sunLow;
-    this.rainbow.visible = sunLow > 0.01;
+    this.rainbow.visible = false;
     const hl = Math.hypot(s.sunDir[0], s.sunDir[2]) || 1;
     this.rainbow.position.set(p.x - (s.sunDir[0] / hl) * 210, p.y - 12, p.z - (s.sunDir[2] / hl) * 210);
     this.rainbow.lookAt(p);

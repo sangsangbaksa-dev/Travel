@@ -70,9 +70,10 @@ export class Realms {
   private readonly tiles = new Map<string, THREE.Group>();
   private readonly groundMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   private readonly caveMaterial = new THREE.MeshLambertMaterial({ color: '#514968', side: THREE.DoubleSide });
-  private readonly caveCrystal = new THREE.MeshLambertMaterial({ color: '#80e5d9', emissive: '#207a80', emissiveIntensity: 0.4 });
-  private readonly skyStone = new THREE.MeshLambertMaterial({ color: '#c5b7e0' });
+  private readonly caveCrystal = new THREE.MeshLambertMaterial({ color: '#8c8b84', flatShading: true });
+  private readonly skyStone = new THREE.MeshLambertMaterial({ color: '#a5a49b', flatShading: true });
   private readonly decoGeometry = new THREE.ConeGeometry(0.45, 2, 6);
+  private readonly rockGeometry = new THREE.IcosahedronGeometry(0.8, 0);
   private readonly cloudGeometry = new THREE.SphereGeometry(1, 9, 6);
   private readonly cloudMaterial = new THREE.MeshLambertMaterial({ color: '#f8fbff' });
   private readonly islandGeometry = new THREE.ConeGeometry(1, 2, 7);
@@ -124,7 +125,7 @@ export class Realms {
         this.returnX = ENTRANCES[entry];
         this.mode = entry;
         state.x = state.px = 0;
-        changed = entry === 'cave' ? '지하 동굴' : '하늘 정원';
+        changed = entry === 'cave' ? '지하 동굴' : '고산 지대';
       } else {
         this.mode = 'surface';
         state.x = state.px = this.returnX;
@@ -184,7 +185,7 @@ export class Realms {
   }
 
   private sharedGeometry(geometry: THREE.BufferGeometry) {
-    return ([this.decoGeometry, this.cloudGeometry, this.islandGeometry, this.plantGeometry, this.mushroomGeometry] as THREE.BufferGeometry[]).includes(geometry);
+    return ([this.decoGeometry, this.rockGeometry, this.cloudGeometry, this.islandGeometry, this.plantGeometry, this.mushroomGeometry] as THREE.BufferGeometry[]).includes(geometry);
   }
 
   private makeTile(cx: number, cz: number): THREE.Group {
@@ -194,8 +195,8 @@ export class Realms {
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
-    const low = new THREE.Color(mode === 'cave' ? '#4a4560' : '#86bdbe');
-    const high = new THREE.Color(mode === 'cave' ? '#ab9db5' : '#edf4c9');
+    const low = new THREE.Color(mode === 'cave' ? '#5d5b59' : '#94a58b');
+    const high = new THREE.Color(mode === 'cave' ? '#a6a198' : '#d4d5c6');
     const color = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i) + (cx + 0.5) * SIZE, z = pos.getZ(i) + (cz + 0.5) * SIZE;
@@ -222,14 +223,6 @@ export class Realms {
       const ceiling = new THREE.Mesh(ceilingGeo, this.caveMaterial);
       ceiling.position.set((cx + 0.5) * SIZE, 0, (cz + 0.5) * SIZE);
       group.add(ceiling);
-    } else {
-      // 멀리 떠 있는 암반이 높낮이의 기준이 된다. 바닥은 이어져 있어 돌아오는 길을 막지 않는다.
-      const island = new THREE.Mesh(this.islandGeometry, this.skyStone);
-      island.rotation.z = Math.PI;
-      island.scale.set(3.2, 2.6, 2.5);
-      const ix = (cx + 0.7) * SIZE, iz = (cz + 0.7) * SIZE;
-      island.position.set(ix, heightFor(mode, ix, iz) + 12, iz);
-      group.add(island);
     }
     const vegetation = new THREE.InstancedMesh(mode === 'cave' ? this.mushroomGeometry : this.plantGeometry, mode === 'cave' ? this.mushroomMaterial : this.plantMaterial, 21);
     const transform = new THREE.Object3D();
@@ -238,10 +231,10 @@ export class Realms {
       const x = (cx + (i * 0.38197 + 0.13) % 1) * SIZE;
       const z = (cz + (i * 0.61803 + 0.23) % 1) * SIZE;
       if (Math.hypot(x, z) < 5) continue;
-      const piece = new THREE.Mesh(this.decoGeometry, mode === 'cave' ? this.caveCrystal : this.skyStone);
+      const piece = new THREE.Mesh(mode === 'cave' ? this.decoGeometry : this.rockGeometry, mode === 'cave' ? this.caveCrystal : this.skyStone);
       const scale = 0.5 + (i % 3) * 0.35;
       piece.scale.setScalar(scale);
-      piece.position.set(x, heightFor(mode, x, z) + scale, z);
+      piece.position.set(x, heightFor(mode, x, z) + scale * (mode === 'cave' ? 1 : 0.45), z);
       group.add(piece);
       const ground = heightFor(mode, x, z);
       for (let j = 0; j < 3; j++) {
@@ -262,7 +255,7 @@ export class Realms {
       } else if (i % 2 === 0) {
         const cloud = new THREE.Mesh(this.cloudGeometry, this.cloudMaterial);
         cloud.scale.set(2.5, 0.55, 1.6);
-        cloud.position.set(x + 4, ground + 4 + i * 0.3, z + 3);
+        cloud.position.set(x + 4, ground + 18 + i * 0.5, z + 3);
         group.add(cloud);
       }
     }

@@ -41,10 +41,7 @@ const SIGMA2 = 2 * 0.25 * 0.25; // 작을수록 생태계 경계가 또렷하다
 
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
 const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
-const smooth = (a: number, b: number, x: number) => {
-  const u = clamp((x - a) / (b - a), 0, 1);
-  return u * u * (3 - 2 * u);
-};
+
 
 export function climateAt(x: number, z: number, seed: number): Climate {
   let temp = noise2(x * 0.0021, z * 0.0021, seed + 50) * 1.9 + noise2(x * 0.006, z * 0.006, seed + 52) * 0.35;
@@ -55,9 +52,8 @@ export function climateAt(x: number, z: number, seed: number): Climate {
   temp = lerp(temp, 0.1, s);
   moist = lerp(moist, -0.25, s);
   // 마법 지대: 시작 지점에서 조금 떨어진 곳에 덩어리로 나타난다
-  const mn = noise2(x * 0.0019, z * 0.0019, seed + 60) * 1.7 + noise2(x * 0.005, z * 0.005, seed + 62) * 0.3;
-  const magic = smooth(0.3, 0.6, mn) * smooth(110, 230, Math.hypot(x, z));
-  const kind = smooth(0.4, 0.6, noise2(x * 0.003, z * 0.003, seed + 61) * 0.9 + 0.5);
+  const magic = 0;
+  const kind = 0;
   return { temp: clamp(temp, -1.1, 1.1), moist: clamp(moist, -1.1, 1.1), magic, kind };
 }
 

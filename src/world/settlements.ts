@@ -74,12 +74,19 @@ export class Settlements {
         const foundationHeight = ground + .5 - foundationBottom;
         piece(area, box, '#cabda4', x, foundationBottom + foundationHeight/2, z, w+.3, foundationHeight, d+.3);
         piece(area, box, wall, x, ground+.5+h/2, z, w, h, d);
-        if (style === 1) piece(area, box, top, x, ground+.5+h+.16, z, w+.25, .32, d+.25);
+        if (style === 1 || style === 2) piece(area, box, top, x, ground+.5+h+.16, z, w+.25, .32, d+.25);
         else piece(area, roof, top, x, ground+.5+h+.8, z, w*.78, 1.6, d*.78, Math.PI/4);
         // 광장 쪽의 문과 창문
         const facing = dz > 0 ? -1 : 1;
         piece(area, box, '#8b6d60', x, ground+1.05, z+facing*(d/2+.015), .75, 1.1, .06);
         for (const side of [-1,1]) piece(area, box, '#9ec9d0', x+side*1.15, ground+1.75, z+facing*(d/2+.025), .65, .65, .07);
+        if (style === 2) {
+          // 층마다 창을 배치하고 1층은 상점이나 업무 공간처럼 구분한다.
+          for (let floor = 1; floor < Math.floor(h / 1.4); floor++) for (const side of [-1, 1]) {
+            piece(area, box, '#a7c0bf', x + side * 1.15, ground + 1.75 + floor * 1.25, z + facing * (d / 2 + .03), .7, .72, .06);
+          }
+          piece(area, box, i % 2 ? '#708c87' : '#ad8973', x, ground + 2.45, z + facing * (d / 2 + .08), 2.1, .23, .16);
+        }
       });
       if (style === 2) {
         // 도로 타일과 가로수는 인스턴스로 묶어 먼 도시의 드로우콜을 줄인다.
@@ -97,6 +104,18 @@ export class Settlements {
           roadMesh.setMatrixAt(i, temp.matrix);
         });
         area.add(roadMesh);
+        // 교차로 주변 횡단보도와 가로등.
+        for (const side of [-1, 1]) for (let stripe = -2; stripe <= 2; stripe++) {
+          const x = place.x + stripe * .55, z = place.z + side * 6;
+          piece(area, box, '#f4f0e3', x, height(x, z) + .16, z, .32, .025, 1.3);
+          const x2 = place.x + side * 6, z2 = place.z + stripe * .55;
+          piece(area, box, '#f4f0e3', x2, height(x2, z2) + .16, z2, 1.3, .025, .32);
+        }
+        for (const [dx, dz] of [[-5,-5],[5,-5],[-5,5],[5,5]]) {
+          const x = place.x + dx, z = place.z + dz, y = height(x,z);
+          piece(area, round, '#777c78', x, y + 1.7, z, .09, 3.4, .09);
+          piece(area, box, '#e9e6d7', x, y + 3.45, z, .42, .12, .42);
+        }
         const treePositions: { x: number; z: number }[] = [];
         for (let n = -18; n <= 18; n += 6) for (const side of [-1, 1]) {
           if (Math.abs(n) < 7) continue;

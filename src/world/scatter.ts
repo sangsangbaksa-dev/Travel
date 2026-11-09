@@ -91,11 +91,6 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
   const out: WorldObj[] = [];
   const n = { x: 0, y: 1, z: 0 };
 
-  if (Math.floor(STARTER_RUNE[0] / CHUNK) === cx && Math.floor(STARTER_RUNE[1] / CHUNK) === cz) {
-    const [sx, sz] = STARTER_RUNE;
-    out.push({ kind: 'rune', x: sx, z: sz, y: t.height(sx, sz), scale: 1, rot: 0, variant: 0, biome: 0, r: 1.3, top: -Infinity, launch: RUNE_LAUNCH });
-  }
-
   for (let i = 0; i < 48; i++) {
     // 난수는 항상 같은 순서로 소비해서 중간에 건너뛰어도 결과가 안정적이다
     const x = (cx + rnd()) * CHUNK;
@@ -139,30 +134,6 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
     out.push(obj);
   }
 
-  // 마법 요소: 마법진 점프 패드와 떠다니는 섬. 마법 지대에서 훨씬 자주 나온다.
-  const rnd2 = mulberry32(Math.imul(cx, 15485863) ^ Math.imul(cz, 32452843) ^ Math.imul(seed, 49979687));
-  for (let i = 0; i < 2; i++) {
-    const x = (cx + rnd2()) * CHUNK;
-    const z = (cz + rnd2()) * CHUNK;
-    const runeRoll = rnd2();
-    const floatRoll = rnd2();
-    const hover = rnd2();
-    const rot = rnd2() * Math.PI * 2;
-    if (Math.hypot(x, z) < SPAWN_CLEAR + 4 || inSettlement(x, z)) continue;
-    const y = t.height(x, z);
-    if (y < water + 0.8) continue;
-    const biome = dominantBiome(t.climate ? t.climate(x, z) : DEFAULT_CLIMATE);
-    const magic = biome >= 6 ? 1 : 0;
-    surfaceNormal(t, x, z, n);
-
-    if (runeRoll < 0.04 + 0.3 * magic && n.y > 0.9) {
-      const o: WorldObj = { kind: 'rune', x, z, y, scale: 1, rot, variant: 0, biome, r: 1.3, top: -Infinity, launch: RUNE_LAUNCH };
-      if (!out.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + o.r + 0.8)) out.push(o);
-    } else if (floatRoll < 0.04 + 0.32 * magic) {
-      const o: WorldObj = { kind: 'float', x, z, y: y + 7 + hover * 6, scale: 1 + hover * 0.9, rot, variant: 0, biome, r: 0, top: -Infinity };
-      if (!out.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + 0.8)) out.push(o);
-    }
-  }
   return out;
 }
 

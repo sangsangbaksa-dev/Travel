@@ -31,7 +31,7 @@ function leave(game: ReturnType<typeof setup>) {
 }
 
 describe('동굴 입구와 하늘 계단', () => {
-  it.each([[-5, 'cave', '지하 동굴'], [5, 'sky', '하늘 정원']] as const)(
+  it.each([[-5, 'cave', '지하 동굴'], [5, 'sky', '고산 지대']] as const)(
     '입구 %i에서 %s에 들어가고 같은 길로 돌아온다', (x, mode, label) => {
       const game = setup();
       expect(enter(game, x)).toBe(label);
