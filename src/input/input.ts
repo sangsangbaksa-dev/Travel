@@ -1,0 +1,144 @@
+// 키보드 + 터치(조이스틱/점프 버튼/화면 드래그)를 하나의 입력 형태로 합친다.
+export interface InputFrame {
+  /** 카메라 기준 입력: x=오른쪽, y=앞 (길이 0~1) */
+  moveX: number;
+  moveY: number;
+  /** 카메라 회전 델타(라디안), 읽으면 비워진다 */
+  lookYaw: number;
+  lookPitch: number;
+}
+
+export class Input {
+  private keys = new Set<string>();
+  private jumpQueued = false;
+  private jumpTouch = false;
+  private stick = { x: 0, y: 0 };
+  private look = { yaw: 0, pitch: 0 };
+  readonly isTouch: boolean;
+
+  constructor(private readonly canvas: HTMLElement, root: HTMLElement) {
+    this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+
+    addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+      if (e.repeat) return;
+      this.keys.add(e.code);
+      if (e.code === 'Space') this.jumpQueued = true;
+    });
+    addEventListener('keyup', (e) => this.keys.delete(e.code));
+    addEventListener('blur', () => this.keys.clear());
+
+    // 마우스 드래그로 카메라 회전
+    let dragging = false;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') { dragging = true; canvas.setPointerCapture(e.pointerId); }
+    });
+    canvas.addEventListener('pointerup', () => { dragging = false; });
+    canvas.addEventListener('pointermove', (e) => {
+      if (dragging && e.pointerType === 'mouse') this.addLook(e.movementX * 0.005, e.movementY * 0.004);
+    });
+
+    if (this.isTouch) this.buildTouchUi(root);
+  }
+
+  private addLook(yaw: number, pitch: number) {
+    this.look.yaw += yaw;
+    this.look.pitch += pitch;
+  }
+
+  private buildTouchUi(root: HTMLElement) {
+    const base = document.createElement('div');
+    base.className = 'stick';
+    const knob = document.createElement('div');
+    knob.className = 'knob';
+    base.appendChild(knob);
+    const jump = document.createElement('button');
+    jump.className = 'jumpbtn';
+    jump.textContent = '점프';
+    root.append(base, jump);
+
+    const R = 55;
+    let stickId = -1;
+    let cx = 0, cy = 0;
+    const setKnob = (dx: number, dy: number) => {
+      const len = Math.hypot(dx, dy);
+      const k = len > R ? R / len : 1;
+      dx *= k; dy *= k;
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      this.stick.x = dx / R;
+      this.stick.y = -dy / R;
+    };
+    base.addEventListener('pointerdown', (e) => {
+      stickId = e.pointerId;
+      base.setPointerCapture(e.pointerId);
+      const r = base.getBoundingClientRect();
+      cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+      setKnob(e.clientX - cx, e.clientY - cy);
+    });
+    base.addEventListener('pointermove', (e) => {
+      if (e.pointerId === stickId) setKnob(e.clientX - cx, e.clientY - cy);
+    });
+    const endStick = (e: PointerEvent) => {
+      if (e.pointerId !== stickId) return;
+      stickId = -1; this.stick.x = this.stick.y = 0;
+      knob.style.transform = 'translate(0,0)';
+    };
+    base.addEventListener('pointerup', endStick);
+    base.addEventListener('pointercancel', endStick);
+
+    jump.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      jump.setPointerCapture(e.pointerId);
+      this.jumpTouch = true;
+      this.jumpQueued = true;
+    });
+    const endJump = () => { this.jumpTouch = false; };
+    jump.addEventListener('pointerup', endJump);
+    jump.addEventListener('pointercancel', endJump);
+
+    // 화면 오른쪽을 드래그하면 카메라 회전
+    let lookId = -1, lx = 0, ly = 0;
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      lookId = e.pointerId; lx = e.clientX; ly = e.clientY;
+    });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'mouse' || e.pointerId !== lookId) return;
+      this.addLook((e.clientX - lx) * 0.006, (e.clientY - ly) * 0.005);
+      lx = e.clientX; ly = e.clientY;
+    });
+    const endLook = (e: PointerEvent) => { if (e.pointerId === lookId) lookId = -1; };
+    this.canvas.addEventListener('pointerup', endLook);
+    this.canvas.addEventListener('pointercancel', endLook);
+  }
+
+  /** 점프 버튼이 새로 눌렸는가 (한 번 읽으면 소비됨) */
+  consumeJump(): boolean {
+    const j = this.jumpQueued;
+    this.jumpQueued = false;
+    return j;
+  }
+
+  get jumpHeld(): boolean {
+    return this.keys.has('Space') || this.jumpTouch;
+  }
+
+  read(): InputFrame {
+    const k = this.keys;
+    let x = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    let y = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+    x += this.stick.x;
+    y += this.stick.y;
+    const len = Math.hypot(x, y);
+    if (len > 1) { x /= len; y /= len; }
+    const yawKeys = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
+    const frame: InputFrame = {
+      moveX: x, moveY: y,
+      lookYaw: this.look.yaw + yawKeys * 0.04,
+      lookPitch: this.look.pitch,
+    };
+    this.look.yaw = 0;
+    this.look.pitch = 0;
+    return frame;
+  }
+}

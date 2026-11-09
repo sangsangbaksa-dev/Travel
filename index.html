@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>큐브 월드</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+    body {
+      background: linear-gradient(#8fd0ff 0%, #bfe6ff 38%, #dff1ff 52%, #dff1ff 100%);
+      font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+      -webkit-user-select: none; user-select: none; touch-action: none;
+    }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .hint {
+      position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+      padding: 7px 14px; border-radius: 999px; background: rgba(255,255,255,.7);
+      color: #5b4a6e; font-size: 13px; backdrop-filter: blur(6px); pointer-events: none;
+      transition: opacity 1s; white-space: nowrap;
+    }
+    .hint.hide { opacity: 0; }
+    .stick {
+      position: fixed; left: max(24px, env(safe-area-inset-left)); bottom: max(28px, env(safe-area-inset-bottom));
+      width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(255,255,255,.35); border: 2px solid rgba(255,255,255,.7);
+      display: grid; place-items: center; touch-action: none;
+    }
+    .knob { width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,.9); box-shadow: 0 2px 8px rgba(80,60,110,.25); }
+    .jumpbtn {
+      position: fixed; right: max(28px, env(safe-area-inset-right)); bottom: max(40px, env(safe-area-inset-bottom));
+      width: 88px; height: 88px; border-radius: 50%; border: 0;
+      background: #ff9eb5; color: #fff; font-size: 17px; font-weight: 700;
+      box-shadow: 0 4px 0 #e0728f, 0 8px 16px rgba(80,60,110,.25); touch-action: none;
+    }
+    .jumpbtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #e0728f; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hint" id="hint"></div>
+  <script type="module" src="/src/hud.ts"></script>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
