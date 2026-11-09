@@ -41,15 +41,22 @@ function bat(): { group: THREE.Group; wings: THREE.Group[] } {
   return { group, wings };
 }
 
-function skySprite(): { group: THREE.Group; wings: undefined } {
+function skyBird(): { group: THREE.Group; wings: THREE.Group[] } {
   const group = new THREE.Group();
-  ball(group, skyBody, 0, 0, 0, 0.42, 0.34, 0.4);
+  ball(group, skyBody, 0, 0, 0, 0.26, 0.2, 0.48);
+  ball(group, skyBody, 0, 0.12, 0.4, 0.18, 0.18, 0.2);
+  ball(group, skyAccent, 0, 0.08, 0.62, 0.07, 0.05, 0.14);
   for (const side of [-1, 1]) {
-    ball(group, eye, side * 0.13, 0.03, 0.36, 0.035, 0.045, 0.025);
-    ball(group, skyAccent, side * 0.3, -0.24, 0, 0.09, 0.2, 0.09);
+    ball(group, eye, side * 0.14, 0.15, 0.52, 0.025, 0.03, 0.025);
   }
-  ball(group, skyAccent, 0, -0.3, -0.1, 0.08, 0.22, 0.08);
-  return { group, wings: undefined };
+  const wings = [-1, 1].map(side => {
+    const wing = new THREE.Group();
+    wing.position.x = side * 0.2;
+    ball(wing, skyBody, side * 0.48, 0, 0, 0.55, 0.06, 0.2);
+    group.add(wing);
+    return wing;
+  });
+  return { group, wings };
 }
 
 /** 지하 박쥐와 하늘을 유영하는 작은 생명체. terrain은 현재 영역의 높이를 제공한다. */
@@ -101,7 +108,7 @@ export class RealmCreatures {
       const x = (cx + 0.15 + rnd() * 0.7) * CHUNK;
       const z = (cz + 0.15 + rnd() * 0.7) * CHUNK;
       const phase = rnd() * Math.PI * 2;
-      const creature: Creature = { ...(this.mode === 'cave' ? bat() : skySprite()), x, z, phase, groundY: 0, nextGroundSample: 0 };
+      const creature: Creature = { ...(this.mode === 'cave' ? bat() : skyBird()), x, z, phase, groundY: 0, nextGroundSample: 0 };
       creatures.push(creature);
       this.group.add(creature.group);
     }

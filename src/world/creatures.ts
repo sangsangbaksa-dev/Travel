@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Terrain } from '../terrain/height';
+import { dominantBiome, type Biome, BIOMES } from '../terrain/biome';
 import { CHUNK, mulberry32 } from './scatter';
+import { inSettlement } from './settlement-layout';
 
 type Animal = {
   group: THREE.Group;
@@ -9,6 +11,7 @@ type Animal = {
   z: number;
   phase: number;
   bird: boolean;
+  species: Species;
   groundY: number;
   nextGroundSample: number;
   overWater: boolean;
@@ -25,7 +28,27 @@ const colors = {
   white: new THREE.MeshLambertMaterial({ color: '#f5f3e8' }),
   dark: new THREE.MeshLambertMaterial({ color: '#39464c' }),
   beak: new THREE.MeshLambertMaterial({ color: '#e8b66b' }),
+  fox: new THREE.MeshLambertMaterial({ color: '#d99b64' }),
+  goat: new THREE.MeshLambertMaterial({ color: '#d7d5ca' }),
+  horn: new THREE.MeshLambertMaterial({ color: '#81776c' }),
+  parrot: new THREE.MeshLambertMaterial({ color: '#60a989' }),
 };
+
+export type Species = 'rabbit' | 'deer' | 'fox' | 'goat' | 'turtle' | 'bird' | 'parrot';
+
+/** 고도가 높은 곳은 기후와 관계없이 고산 서식지로 취급한다. */
+export function creatureSpecies(biome: Biome, height: number, roll: number): Species {
+  if (height > 17 || biome === 'snow') return roll < 0.7 ? 'goat' : 'bird';
+  switch (biome) {
+    case 'desert': return roll < 0.75 ? 'fox' : 'bird';
+    case 'tropical': return roll < 0.45 ? 'turtle' : 'parrot';
+    case 'autumn': return roll < 0.65 ? 'deer' : 'bird';
+    case 'blossom': return roll < 0.5 ? 'deer' : 'bird';
+    case 'crystal': return roll < 0.55 ? 'goat' : 'bird';
+    case 'mushroom': return roll < 0.55 ? 'deer' : 'bird';
+    default: return roll < 0.48 ? 'rabbit' : roll < 0.72 ? 'deer' : 'bird';
+  }
+}
 
 function part(parent: THREE.Group, material: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number) {
   const mesh = new THREE.Mesh(sphere, material);
@@ -62,21 +85,47 @@ function turtle(): THREE.Group {
   return group;
 }
 
-function bird(): { group: THREE.Group; wings: THREE.Group[] } {
+function bird(tropical = false): { group: THREE.Group; wings: THREE.Group[] } {
   const group = new THREE.Group();
-  part(group, colors.blue, 0, 0, 0, 0.3, 0.23, 0.42);
+  const plumage = tropical ? colors.parrot : colors.blue;
+  part(group, plumage, 0, 0, 0, 0.3, 0.23, 0.42);
   part(group, colors.white, 0, -0.12, 0.16, 0.23, 0.12, 0.25);
-  part(group, colors.blue, 0, 0.13, 0.34, 0.2, 0.2, 0.2);
+  part(group, plumage, 0, 0.13, 0.34, 0.2, 0.2, 0.2);
   part(group, colors.beak, 0, 0.08, 0.54, 0.07, 0.05, 0.12);
   for (const x of [-0.16, 0.16]) part(group, colors.dark, x, 0.17, 0.47, 0.025, 0.03, 0.025);
   const wings = [-1, 1].map((side) => {
     const wing = new THREE.Group();
     wing.position.x = side * 0.2;
-    part(wing, colors.blue, side * 0.32, 0, -0.02, 0.4, 0.06, 0.2);
+    part(wing, plumage, side * 0.32, 0, -0.02, 0.4, 0.06, 0.2);
     group.add(wing);
     return wing;
   });
   return { group, wings };
+}
+
+function quadruped(species: 'fox' | 'deer' | 'goat'): THREE.Group {
+  const group = new THREE.Group();
+  const fox = species === 'fox', goat = species === 'goat';
+  const fur = fox ? colors.fox : goat ? colors.goat : colors.brown;
+  const height = fox ? 0.45 : 0.75;
+  part(group, fur, 0, height, 0, fox ? 0.25 : 0.29, 0.25, fox ? 0.46 : 0.51);
+  part(group, fur, 0, height + 0.18, 0.48, 0.21, 0.23, 0.25);
+  for (const side of [-1, 1]) {
+    for (const z of [-0.3, 0.3]) part(group, fur, side * 0.18, height / 2, z, 0.065, height / 2, 0.07);
+    const ear = part(group, fur, side * 0.16, height + 0.45, 0.43, 0.09, fox ? 0.23 : 0.14, 0.07);
+    ear.rotation.z = -side * 0.3;
+    part(group, colors.dark, side * 0.12, height + 0.2, 0.68, 0.025, 0.035, 0.022);
+    if (goat) {
+      const horn = part(group, colors.horn, side * 0.12, height + 0.48, 0.31, 0.05, 0.22, 0.06);
+      horn.rotation.x = -0.5;
+    }
+  }
+  if (fox) {
+    const tail = part(group, fur, 0, height + 0.07, -0.65, 0.19, 0.18, 0.45);
+    tail.rotation.x = -0.35;
+    part(group, colors.cream, 0, height + 0.18, -0.98, 0.13, 0.12, 0.15);
+  }
+  return group;
 }
 
 /** 주변 청크의 작은 동물과 새. 이동하면 먼 개체는 제거하고 같은 위치에 다시 생성한다. */
@@ -97,7 +146,7 @@ export class CreatureField {
         continue;
       }
       for (const animal of animals) {
-        const t = time * (animal.bird ? 0.25 : 0.14) + animal.phase;
+        const t = time * (animal.bird ? 0.18 : animal.species === 'turtle' ? 0.035 : 0.08) + animal.phase;
         const radius = animal.bird ? 3.5 : 1.1;
         let x = animal.x + Math.cos(t) * radius;
         let z = animal.z + Math.sin(t) * radius;
@@ -109,7 +158,7 @@ export class CreatureField {
           animal.nextGroundSample = time + 0.15;
         }
         if (animal.overWater) { x = animal.x; z = animal.z; }
-        animal.group.position.set(x, animal.groundY + (animal.bird ? 4.5 + Math.sin(time * 1.6 + animal.phase) * 0.3 : Math.abs(Math.sin(time * 2 + animal.phase)) * 0.05), z);
+        animal.group.position.set(x, animal.groundY + (animal.bird ? 4.5 + Math.sin(time * 1.6 + animal.phase) * 0.3 : animal.species === 'rabbit' ? Math.abs(Math.sin(time * 2 + animal.phase)) * 0.05 : 0), z);
         animal.group.rotation.y = -t;
         if (animal.wings) animal.wings.forEach((wing, i) => { wing.rotation.z = (i === 0 ? 1 : -1) * Math.sin(time * 8 + animal.phase) * 0.55; });
       }
@@ -125,11 +174,16 @@ export class CreatureField {
       const x = (cx + 0.12 + rnd() * 0.76) * CHUNK;
       const z = (cz + 0.12 + rnd() * 0.76) * CHUNK;
       const phase = rnd() * Math.PI * 2;
-      const kind = rnd();
-      const isBird = kind > 0.7;
-      if (!isBird && this.terrain.height(x, z) < (this.terrain.waterLevel ?? -Infinity) + 1.5) continue;
-      const made = isBird ? bird() : { group: kind < 0.45 ? rabbit(kind < 0.2) : turtle(), wings: undefined };
-      const animal: Animal = { ...made, x, z, phase, bird: isBird, groundY: 0, nextGroundSample: 0, overWater: false };
+      const roll = rnd();
+      const height = this.terrain.height(x, z);
+      const biome = this.terrain.climate ? BIOMES[dominantBiome(this.terrain.climate(x, z))] : 'meadow';
+      const species = creatureSpecies(biome, height, roll);
+      const isBird = species === 'bird' || species === 'parrot';
+      if (!isBird && height < (this.terrain.waterLevel ?? -Infinity) + 1.5) continue;
+      if (!isBird && inSettlement(x, z)) continue;
+      if (!isBird && species !== 'goat' && Math.max(Math.abs(this.terrain.height(x + 1, z) - height), Math.abs(this.terrain.height(x, z + 1) - height)) > 1) continue;
+      const made = isBird ? bird(species === 'parrot') : { group: species === 'rabbit' ? rabbit(roll < 0.2) : species === 'turtle' ? turtle() : quadruped(species as 'fox' | 'deer' | 'goat'), wings: undefined };
+      const animal: Animal = { ...made, x, z, phase, species, bird: isBird, groundY: 0, nextGroundSample: 0, overWater: false };
       animals.push(animal);
       this.group.add(animal.group);
     }

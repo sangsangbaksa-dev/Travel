@@ -76,6 +76,10 @@ export class Realms {
   private readonly cloudGeometry = new THREE.SphereGeometry(1, 9, 6);
   private readonly cloudMaterial = new THREE.MeshLambertMaterial({ color: '#f8fbff' });
   private readonly islandGeometry = new THREE.ConeGeometry(1, 2, 7);
+  private readonly plantGeometry = new THREE.ConeGeometry(0.22, 0.8, 5);
+  private readonly plantMaterial = new THREE.MeshLambertMaterial({ color: '#8cad78' });
+  private readonly mushroomGeometry = new THREE.SphereGeometry(0.34, 7, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+  private readonly mushroomMaterial = new THREE.MeshLambertMaterial({ color: '#94c7b5', emissive: '#2c6558', emissiveIntensity: 0.35 });
   private readonly returnEntrance = new THREE.Group();
   private previousZ: number | null = null;
   private returnX = 0;
@@ -148,7 +152,10 @@ export class Realms {
   private clearTiles() {
     for (const tile of this.tiles.values()) {
       this.realmGroup.remove(tile);
-      tile.traverse((obj) => { if (obj instanceof THREE.Mesh && obj.geometry !== this.decoGeometry && obj.geometry !== this.cloudGeometry && obj.geometry !== this.islandGeometry) obj.geometry.dispose(); });
+      tile.traverse((obj) => {
+        if (obj instanceof THREE.InstancedMesh) obj.dispose();
+        if (obj instanceof THREE.Mesh && !this.sharedGeometry(obj.geometry)) obj.geometry.dispose();
+      });
     }
     this.tiles.clear();
   }
@@ -159,7 +166,10 @@ export class Realms {
       const [tx, tz] = key.split(',').map(Number);
       if (Math.max(Math.abs(tx - cx), Math.abs(tz - cz)) > 2) {
         this.realmGroup.remove(tile);
-        tile.traverse((obj) => { if (obj instanceof THREE.Mesh && obj.geometry !== this.decoGeometry && obj.geometry !== this.cloudGeometry && obj.geometry !== this.islandGeometry) obj.geometry.dispose(); });
+        tile.traverse((obj) => {
+          if (obj instanceof THREE.InstancedMesh) obj.dispose();
+          if (obj instanceof THREE.Mesh && !this.sharedGeometry(obj.geometry)) obj.geometry.dispose();
+        });
         this.tiles.delete(key);
       }
     }
@@ -171,6 +181,10 @@ export class Realms {
         this.realmGroup.add(tile);
       }
     }
+  }
+
+  private sharedGeometry(geometry: THREE.BufferGeometry) {
+    return ([this.decoGeometry, this.cloudGeometry, this.islandGeometry, this.plantGeometry, this.mushroomGeometry] as THREE.BufferGeometry[]).includes(geometry);
   }
 
   private makeTile(cx: number, cz: number): THREE.Group {
@@ -217,6 +231,9 @@ export class Realms {
       island.position.set(ix, heightFor(mode, ix, iz) + 12, iz);
       group.add(island);
     }
+    const vegetation = new THREE.InstancedMesh(mode === 'cave' ? this.mushroomGeometry : this.plantGeometry, mode === 'cave' ? this.mushroomMaterial : this.plantMaterial, 21);
+    const transform = new THREE.Object3D();
+    let plantCount = 0;
     for (let i = 0; i < 7; i++) {
       const x = (cx + (i * 0.38197 + 0.13) % 1) * SIZE;
       const z = (cz + (i * 0.61803 + 0.23) % 1) * SIZE;
@@ -226,6 +243,15 @@ export class Realms {
       piece.scale.setScalar(scale);
       piece.position.set(x, heightFor(mode, x, z) + scale, z);
       group.add(piece);
+      const ground = heightFor(mode, x, z);
+      for (let j = 0; j < 3; j++) {
+        const dx = (j - 1) * 0.6, dz = (j % 2) * 0.55 + 1;
+        const y = heightFor(mode, x + dx, z + dz);
+        transform.position.set(x + dx, y + (mode === 'cave' ? 0.12 : 0.35), z + dz);
+        transform.scale.setScalar(0.65 + j * 0.15);
+        transform.updateMatrix();
+        vegetation.setMatrixAt(plantCount++, transform.matrix);
+      }
       if (mode === 'cave') {
         const stalactite = new THREE.Mesh(this.decoGeometry, this.caveMaterial);
         stalactite.scale.set(scale * 1.4, scale * 1.8, scale * 1.4);
@@ -236,10 +262,13 @@ export class Realms {
       } else if (i % 2 === 0) {
         const cloud = new THREE.Mesh(this.cloudGeometry, this.cloudMaterial);
         cloud.scale.set(2.5, 0.55, 1.6);
-        cloud.position.set(x + 4, heightFor(mode, x, z) + 4 + i * 0.3, z + 3);
+        cloud.position.set(x + 4, ground + 4 + i * 0.3, z + 3);
         group.add(cloud);
       }
     }
+    vegetation.count = plantCount;
+    vegetation.instanceMatrix.needsUpdate = true;
+    group.add(vegetation);
     return group;
   }
 }

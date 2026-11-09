@@ -323,9 +323,12 @@ function frame(now: number) {
   const underwaterView = realms.mode === 'surface' && camera.position.y < waterLevel;
   document.body.classList.toggle('underwater', underwaterView);
   const fog = scene.fog as THREE.Fog;
-  fog.near = underwaterView ? 5 : 30;
-  fog.far = underwaterView ? 38 : 92;
+  const inCave = realms.mode === 'cave';
+  fog.near = underwaterView ? 5 : inCave ? 12 : 30;
+  fog.far = underwaterView ? 38 : inCave ? 68 : 92;
   if (underwaterView) fog.color.set('#5ea6b1');
+  else if (inCave) fog.color.set('#55566a');
+  clouds.mesh.visible = !inCave;
   clouds.update(camera, time, skyState);
   water.update(camera.position.x, camera.position.z, time, Math.min(1, skyState.sunIntensity / 1.25 + skyState.moonIntensity * 0.3));
   if (started) audio.update(dt, { elevation: skyState.elevation, speed, grounded: s.grounded });
