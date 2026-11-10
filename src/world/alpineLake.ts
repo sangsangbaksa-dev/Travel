@@ -47,5 +47,5 @@ export function makeAlpineLake(): Water {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
   geometry.setIndex(triangles);
   geometry.computeVertexNormals();
-  return new Water(ALPINE_LAKE.level, { geometry, x: ALPINE_LAKE.x, z: ALPINE_LAKE.z, color: '#5aaea6' });
+  return new Water(ALPINE_LAKE.level, { geometry, x: ALPINE_LAKE.x, z: ALPINE_LAKE.z, color: '#3f9088' });
 }

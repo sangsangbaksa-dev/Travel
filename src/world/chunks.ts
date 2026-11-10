@@ -29,30 +29,32 @@ const lerpC = (o: RGB, a: RGB, b: RGB, u: number) => {
   o[2] = a[2] + (b[2] - a[2]) * u;
 };
 
-// 생태계별 지면 색 (낮은 곳, 높은 곳) — BIOMES 순서와 같다
+// 생태계별 지면 색 (낮은 곳, 높은 곳) — BIOMES 순서와 같다.
+// 채도를 낮추고 바이옴 간에 온도를 갈라, 나무·바위·건물이 지면 위에 또렷이 앉게 한다.
 const GROUND: [RGB, RGB][] = [
-  [hex('#9be08a'), hex('#d6f0a0')], // meadow
-  [hex('#cfe49a'), hex('#f6d3e6')], // blossom: 분홍빛 잔디
-  [hex('#dfb865'), hex('#f2d58e')], // autumn: 황금빛
-  [hex('#f0d596'), hex('#f8e8b8')], // desert: 모래
-  [hex('#6fdc9a'), hex('#b6f2a6')], // tropical: 짙은 초록
-  [hex('#e3eff9'), hex('#ffffff')], // snow
-  [hex('#c8b6f5'), hex('#ecdfff')], // crystal: 라벤더
-  [hex('#8fd6c4'), hex('#cdb4f0')], // mushroom: 청록에서 보라로
+  [hex('#5fa85a'), hex('#c2cc7a')], // meadow: 진한 잔디 → 햇살 받은 마른 풀
+  [hex('#a8c07a'), hex('#e0b8c4')], // blossom: 연두 잔디 → 먼지 앉은 장미빛
+  [hex('#c4843c'), hex('#e3b85c')], // autumn: 호박·황토
+  [hex('#e0c48a'), hex('#f0e2bc')], // desert: 따뜻한 모래 (가을보다 옅고 덜 주황)
+  [hex('#2e7a4e'), hex('#6aaa58')], // tropical: 깊은 밀림 초록 (기존 민트를 고침)
+  [hex('#d2e0ec'), hex('#f2f6fa')], // snow: 순백을 피해 소나무·바위가 드러나게
+  [hex('#8a7cb8'), hex('#cfc4e4')], // crystal: 살짝 가라앉힌 라벤더, 수정이 돋보이게
+  [hex('#4e9a80'), hex('#b0a8c4')], // mushroom: 이끼 청록 → 엷은 보라
 ];
-const SAND = hex('#f4e3b0');
-const SNOW_SAND = hex('#e8f0f7');
-const ROCK = hex('#c9c2d6');
-const SNOW = hex('#ffffff');
-const SEA_SHALLOW = hex('#8fdcd2');
-const SEA_DEEP = hex('#3a7fa6');
-const FOAM = hex('#ffffff');
-const CAVE_GROUND = hex('#77736e');
-const VOLCANIC_ROCK = hex('#625b55');
-const LAKE_GRAVEL = hex('#b2ac99');
-const LAKE_BOTTOM = hex('#47786f');
+const SAND = hex('#ead4a0');
+const SNOW_SAND = hex('#dce8f2');
+const ROCK = hex('#9a9388');
+const SNOW = hex('#f4f7fb');
+const SEA_SHALLOW = hex('#5eb8c4');
+const SEA_DEEP = hex('#2d6a8c');
+const FOAM = hex('#eef4f2');
+const CAVE_GROUND = hex('#6a6560');
+const VOLCANIC_ROCK = hex('#4e4844');
+const LAKE_GRAVEL = hex('#a49d8a');
+const LAKE_BOTTOM = hex('#3d6e68');
 const ROCK_TINT: RGB[] = [
-  [1, 1, 1], [1, 0.96, 1], [1, 0.9, 0.82], [1, 0.8, 0.6], [0.95, 1, 0.95], [0.95, 1, 1], [0.92, 0.88, 1], [0.88, 1, 1],
+  [1, 0.98, 0.92], [1, 0.94, 0.96], [1, 0.88, 0.78], [1, 0.86, 0.68],
+  [0.95, 1, 0.92], [0.94, 0.98, 1], [0.92, 0.88, 1], [0.88, 1, 0.96],
 ];
 
 // 모든 청크가 공유하는 인덱스 / 재료
@@ -87,7 +89,7 @@ function paint(geo: THREE.BufferGeometry, hexColor: string, yMin = 0, yMax = 1, 
 }
 
 function roundTree(foliage: string, light: string) {
-  const trunk = paint(new THREE.CylinderGeometry(0.16, 0.22, 1.0, 6).translate(0, 0.5, 0), '#b78d6e');
+  const trunk = paint(new THREE.CylinderGeometry(0.16, 0.22, 1.0, 6).translate(0, 0.5, 0), '#8d6a4e');
   const blobs = [
     new THREE.SphereGeometry(0.95, 8, 6).translate(0, 1.5, 0),
     new THREE.SphereGeometry(0.72, 8, 6).translate(0.05, 2.15, 0),
@@ -97,18 +99,18 @@ function roundTree(foliage: string, light: string) {
 }
 
 function pineTree() {
-  const trunk = paint(new THREE.CylinderGeometry(0.14, 0.2, 0.8, 6).translate(0, 0.4, 0), '#9c7a5e');
+  const trunk = paint(new THREE.CylinderGeometry(0.14, 0.2, 0.8, 6).translate(0, 0.4, 0), '#6e5340');
   const cones = [
-    paint(new THREE.ConeGeometry(1.0, 1.3, 8).translate(0, 1.4, 0), '#4f9f86', 0.75, 2.05, '#cfeee3'),
-    paint(new THREE.ConeGeometry(0.78, 1.15, 8).translate(0, 2.1, 0), '#58ae92', 1.5, 2.7, '#e3f7f0'),
-    paint(new THREE.ConeGeometry(0.52, 1.0, 8).translate(0, 2.75, 0), '#66bd9f', 2.25, 3.25, '#ffffff'),
+    paint(new THREE.ConeGeometry(1.0, 1.3, 8).translate(0, 1.4, 0), '#2f6a52', 0.75, 2.05, '#7eab8e'),
+    paint(new THREE.ConeGeometry(0.78, 1.15, 8).translate(0, 2.1, 0), '#3a7d62', 1.5, 2.7, '#8fbe9e'),
+    paint(new THREE.ConeGeometry(0.52, 1.0, 8).translate(0, 2.75, 0), '#4a8f70', 2.25, 3.25, '#c5ddd0'),
   ];
   return mergeGeometries([trunk, ...cones])!;
 }
 
 function palmTree() {
   const parts: THREE.BufferGeometry[] = [
-    paint(new THREE.CylinderGeometry(0.12, 0.2, 2.4, 6).translate(0, 1.2, 0).rotateZ(0.12), '#c79a6b'),
+    paint(new THREE.CylinderGeometry(0.12, 0.2, 2.4, 6).translate(0, 1.2, 0).rotateZ(0.12), '#b08452'),
   ];
   for (let i = 0; i < 6; i++) {
     const leaf = new THREE.SphereGeometry(0.5, 6, 4)
@@ -117,23 +119,23 @@ function palmTree() {
       .rotateZ(-0.45)
       .rotateY((i * Math.PI) / 3)
       .translate(-0.29, 2.4, 0);
-    parts.push(paint(leaf, '#58c878'));
+    parts.push(paint(leaf, '#2f9a4a'));
   }
   for (const [dx, dz] of [[0.1, 0.1], [-0.1, 0.08], [0.02, -0.12]]) {
-    parts.push(paint(new THREE.SphereGeometry(0.13, 6, 4).translate(-0.29 + dx, 2.28, dz), '#8a5a3c'));
+    parts.push(paint(new THREE.SphereGeometry(0.13, 6, 4).translate(-0.29 + dx, 2.28, dz), '#6e3f28'));
   }
   return mergeGeometries(parts)!;
 }
 
 function cactus() {
-  const g = (geo: THREE.BufferGeometry) => paint(geo, '#6fcf8f');
+  const g = (geo: THREE.BufferGeometry) => paint(geo, '#4ea06a');
   return mergeGeometries([
     g(new THREE.CapsuleGeometry(0.3, 1.2, 4, 8).translate(0, 0.9, 0)),
     g(new THREE.CapsuleGeometry(0.17, 0.45, 4, 6).rotateZ(Math.PI / 2).translate(0.42, 1.0, 0)),
     g(new THREE.CapsuleGeometry(0.17, 0.5, 4, 6).translate(0.7, 1.32, 0)),
     g(new THREE.CapsuleGeometry(0.15, 0.4, 4, 6).rotateZ(Math.PI / 2).translate(-0.38, 0.65, 0)),
     g(new THREE.CapsuleGeometry(0.15, 0.4, 4, 6).translate(-0.62, 0.9, 0)),
-    paint(new THREE.SphereGeometry(0.13, 6, 4).translate(0, 1.95, 0), '#ff8fb8'),
+    paint(new THREE.SphereGeometry(0.13, 6, 4).translate(0, 1.95, 0), '#e07898'),
   ])!;
 }
 
@@ -155,9 +157,9 @@ function crystalCluster(base: string, light: string) {
 }
 
 function mushroom(cap: string, capLight: string, spot: string) {
-  const stem = paint(new THREE.CylinderGeometry(0.22, 0.3, 1.0, 8).translate(0, 0.5, 0), '#f6ead8');
+  const stem = paint(new THREE.CylinderGeometry(0.22, 0.3, 1.0, 8).translate(0, 0.5, 0), '#e8d5b8');
   const dome = new THREE.SphereGeometry(0.95, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.8, 1).translate(0, 1.0, 0);
-  const under = paint(new THREE.CircleGeometry(0.95, 12).rotateX(Math.PI / 2).translate(0, 1.0, 0), '#f1d9c4');
+  const under = paint(new THREE.CircleGeometry(0.95, 12).rotateX(Math.PI / 2).translate(0, 1.0, 0), '#d4b896');
   const parts: THREE.BufferGeometry[] = [stem, paint(dome, cap, 1.0, 1.8, capLight), under];
   for (const [x, y, z, r] of [[0.45, 1.58, 0.2, 0.15], [-0.35, 1.62, -0.3, 0.13], [0.02, 1.78, 0.0, 0.14], [-0.2, 1.52, 0.5, 0.1]]) {
     parts.push(paint(new THREE.SphereGeometry(r, 6, 4).scale(1, 0.5, 1).translate(x, y, z), spot));
@@ -173,13 +175,13 @@ function floatingIsland() {
     new THREE.ConeGeometry(0.2, 0.35, 6).translate(0.45, 1.27, 0.1),
   ])!;
   const tree = mergeGeometries([
-    paint(new THREE.CylinderGeometry(0.05, 0.07, 0.4, 5).translate(-0.5, 0.42, -0.2), '#b78d6e'),
-    paint(new THREE.SphereGeometry(0.34, 7, 5).translate(-0.5, 0.82, -0.2), '#86d27f', 0.5, 1.2, '#c3ec97'),
+    paint(new THREE.CylinderGeometry(0.05, 0.07, 0.4, 5).translate(-0.5, 0.42, -0.2), '#8d6a4e'),
+    paint(new THREE.SphereGeometry(0.34, 7, 5).translate(-0.5, 0.82, -0.2), '#4f9a4a', 0.5, 1.2, '#9ccc6e'),
   ])!;
   return mergeGeometries([
-    paint(top, '#9be08a'),
-    paint(under, '#8e7cb8', -2.4, -0.2, '#cdbff0'),
-    paint(crystal, '#8fe8ff', 0.2, 1.5, '#e6fbff'),
+    paint(top, '#5fa85a'),
+    paint(under, '#6e6294', -2.4, -0.2, '#b8a8d8'),
+    paint(crystal, '#6ad4ef', 0.2, 1.5, '#d4f4fb'),
     tree,
   ])!;
 }
@@ -207,24 +209,24 @@ function runeDecal() {
 
 // VARIANT 순서: green, pink, orange, pine, palm, cactus, crystal x3, mushroom x2
 const treeGeos: THREE.BufferGeometry[] = [
-  roundTree('#86d27f', '#c3ec97'),
-  roundTree('#f4a9c4', '#ffd9e6'),
-  roundTree('#f0a45a', '#ffd58a'),
+  roundTree('#3f8f48', '#8fbf5e'),
+  roundTree('#c56e90', '#efb8c8'),
+  roundTree('#c25a28', '#e89848'),
   pineTree(),
   palmTree(),
   cactus(),
-  crystalCluster('#9d7cf5', '#e6dcff'),
-  crystalCluster('#4fc9e8', '#dcfaff'),
-  crystalCluster('#f08ad0', '#ffe0f4'),
-  mushroom('#ff8aa8', '#ffc9d8', '#ffffff'),
-  mushroom('#5aa8ff', '#b9e6ff', '#eafcff'),
+  crystalCluster('#7a58d8', '#d4c4f8'),
+  crystalCluster('#2aa8c8', '#b8eaf6'),
+  crystalCluster('#d060b0', '#f4c8e6'),
+  mushroom('#d45a78', '#f0a8b8', '#f4efe6'),
+  mushroom('#3a86d0', '#8ec8f0', '#e6f4fa'),
 ];
 const floatGeo = floatingIsland();
 const runeGeo = runeDecal();
 const beamGeo = new THREE.CylinderGeometry(0.95, 1.15, 9, 20, 1, true).translate(0, 4.5, 0);
 const rockGeo = new THREE.IcosahedronGeometry(1, 0);
 const treeMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-const rockMat = new THREE.MeshLambertMaterial({ color: '#cdc7dc', flatShading: true });
+const rockMat = new THREE.MeshLambertMaterial({ color: '#b5afa4', flatShading: true });
 const floatMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: '#6b4bd8', emissiveIntensity: 0.1 });
 
 // 밤에 더 밝게 빛나는 마법 재료들
