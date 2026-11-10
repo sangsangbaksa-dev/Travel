@@ -28,8 +28,13 @@ import { Water } from './world/water';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-let pixelRatio = Math.min(devicePixelRatio, 2);
+const coarsePointer = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const renderer = new THREE.WebGLRenderer({
+  antialias: !coarsePointer,
+  powerPreference: 'high-performance',
+  stencil: false,
+});
+let pixelRatio = Math.min(devicePixelRatio || 1, coarsePointer ? 1.25 : 1.75);
 renderer.setPixelRatio(pixelRatio);
 app.appendChild(renderer.domElement);
 
@@ -90,7 +95,7 @@ const minimap = new Minimap(app, deepSea.site);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
 let camYaw = 0.6;
 let camPitch = 0.26;
-const CAM_DIST = 7.5;
+const CAM_DIST = 6;
 const camTarget = new THREE.Vector3();
 
 function resize() {
@@ -169,7 +174,7 @@ function frame(now: number) {
     }
   }
 
-  const inp = input.read();
+  const inp = input.read(dt);
   if (!started) {
     input.consumeJump();
     inp.moveX = inp.moveY = inp.lookYaw = inp.lookPitch = 0;

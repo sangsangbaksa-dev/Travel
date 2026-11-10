@@ -128,6 +128,29 @@ describe('월드 생성', () => {
     seen.slice(0, 6).forEach((n) => expect(n).toBeGreaterThan(20)); // 모든 생태계에 나무가 있다
   });
 
+  it('나무와 바위는 사람 키에 맞고, 바위 윗면은 지면 위에 있다', () => {
+    const player = 1;
+    let trees = 0;
+    let rocks = 0;
+    for (let cx = -6; cx <= 6; cx++) for (let cz = -6; cz <= 6; cz++) {
+      for (const o of generateChunkObjects(t, cx, cz)) {
+        if (o.kind === 'rock') {
+          rocks++;
+          const visible = o.top - o.y;
+          expect(visible).toBeGreaterThan(player * 0.5);
+          expect(visible).toBeLessThan(player * 1.6);
+          expect(visible).toBeCloseTo(1.1 * o.scale, 5);
+        }
+        if (o.kind === 'tree' && o.variant !== VARIANT.cactus && o.variant < VARIANT.crystalViolet) {
+          trees++;
+          expect(o.scale).toBeGreaterThan(1.9); // 기본 높이 약 3 → 사람보다 큰 나무
+        }
+      }
+    }
+    expect(trees).toBeGreaterThan(10);
+    expect(rocks).toBeGreaterThan(5);
+  });
+
   it('지상에 마법진과 공중 섬을 생성하지 않는다', () => {
     for (let x = -8; x <= 8; x++) for (let z = -8; z <= 8; z++) {
       expect(generateChunkObjects(t, x, z).some(o => o.kind === 'rune' || o.kind === 'float')).toBe(false);

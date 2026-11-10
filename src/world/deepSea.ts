@@ -29,7 +29,11 @@ export class DeepSea {
     this.group.visible = false;
     if (!this.site) return;
     const { x, z, y } = this.site;
-    this.group.position.set(x, y, z);
+    const bed: number[] = [];
+    for (const ix of [-3, 0, 3]) for (const iz of [-1.2, 0, 1.2]) bed.push(terrain.height(x + ix, z + iz));
+    const low = Math.min(...bed), high = Math.max(y, ...bed);
+    const sink = Math.max(0, high - low);
+    this.group.position.set(x, high, z);
     const wood = new THREE.MeshLambertMaterial({ color: '#625a4a' });
     const dark = new THREE.MeshLambertMaterial({ color: '#484b42' });
     const stone = new THREE.MeshLambertMaterial({ color: '#6f7d78', flatShading: true });
@@ -39,7 +43,7 @@ export class DeepSea {
       part.position.set(px, py, pz); part.scale.set(sx, sy, sz);
       this.group.add(part); return part;
     };
-    add(0, .35, 0, 8, .7, 3.3);
+    add(0, .35 - sink / 2, 0, 8, .7 + sink, 3.3);
     add(0, 1.15, -1.5, 8, 1.4, .3);
     add(-1.8, 1, 1.5, 4.3, 1.1, .3);
     add(-3.8, 1.05, 0, .35, 1.2, 3);
@@ -54,7 +58,7 @@ export class DeepSea {
       const dx = Math.cos(a) * r, dz = Math.sin(a) * r;
       const floor = terrain.height(x + dx, z + dz);
       const size = .4 + (i % 3) * .25;
-      dummy.position.set(dx, floor - y + size * .35, dz);
+      dummy.position.set(dx, floor - high + size * .6, dz);
       dummy.scale.set(size, size * .6, size * 1.2); dummy.rotation.y = a;
       dummy.updateMatrix(); rocks.setMatrixAt(i, dummy.matrix);
     }

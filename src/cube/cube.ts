@@ -10,6 +10,7 @@ export class Cube {
   private squash = 0; // +면 납작, -면 길쭉
   private squashV = 0;
   private yaw = 0;
+  private readonly shadowFrom = new THREE.Vector3(0, 0, 1);
 
   constructor() {
     const mat = new THREE.MeshLambertMaterial({ color: '#ff9eb5', emissive: '#ff7d9f', emissiveIntensity: 0.22 });
@@ -98,6 +99,6 @@ export class Cube {
     (this.shadow.material as THREE.MeshBasicMaterial).opacity = 0.3 * s;
     this.shadow.position.set(pos.x, groundY + 0.04, pos.z);
     // 비탈에 맞춰 눕힌다
-    this.shadow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+    this.shadow.quaternion.setFromUnitVectors(this.shadowFrom, normal);
   }
 }

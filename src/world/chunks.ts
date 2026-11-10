@@ -461,8 +461,11 @@ export class ChunkManager {
       objs.forEach((o, i) => {
         q.setFromAxisAngle(up, o.rot);
         p.set(o.x - ox, o.y, o.z - oz);
-        if (rock) s.set(o.scale, o.scale * 0.55, o.scale);
-        else s.setScalar(o.scale);
+        if (rock) {
+          // 정이십면체는 원점이 중심이라, 그대로 두면 절반이 땅에 묻힌다
+          s.set(o.scale, o.scale * 0.55, o.scale);
+          p.y += o.scale * 0.55;
+        } else s.setScalar(o.scale);
         mesh.setMatrixAt(i, m4.compose(p, q, s));
         const v = 0.9 + ((((Math.sin(o.x * 12.9898 + o.z * 78.233) * 43758.5453) % 1) + 1) % 1) * 0.16;
         if (plain) return;
