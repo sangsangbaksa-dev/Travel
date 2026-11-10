@@ -35,7 +35,7 @@ export const hud = {
   },
 
   setMuted(m: boolean) {
-    muteBtn.textContent = m ? '소리 꺼짐 (M)' : '소리 켜짐 (M)';
+    muteBtn.textContent = touch ? (m ? '소리 꺼짐' : '소리') : (m ? '소리 꺼짐 (M)' : '소리 켜짐 (M)');
     muteBtn.classList.toggle('on', m);
   },
 
@@ -53,7 +53,7 @@ export const hud = {
   },
 
   setView(firstPerson: boolean) {
-    viewBtn.textContent = firstPerson ? '1인칭 (T)' : '3인칭 (T)';
+    viewBtn.textContent = touch ? (firstPerson ? '1인칭' : '3인칭') : (firstPerson ? '1인칭 (T)' : '3인칭 (T)');
     viewBtn.classList.toggle('on', firstPerson);
   },
 

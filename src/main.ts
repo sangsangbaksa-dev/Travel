@@ -25,8 +25,9 @@ import { Minimap } from './world/minimap';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
-const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
-let pixelRatio = Math.min(devicePixelRatio, 2);
+const coarsePointer = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const renderer = new THREE.WebGLRenderer({ antialias: !coarsePointer, logarithmicDepthBuffer: true });
+let pixelRatio = Math.min(devicePixelRatio || 1, coarsePointer ? 1.25 : 1.75);
 renderer.setPixelRatio(pixelRatio);
 app.appendChild(renderer.domElement);
 
@@ -86,7 +87,7 @@ const camera = new THREE.PerspectiveCamera(60, 1, 0.08, 60000);
 local.add(camera);
 let camYaw = -0.5; // 맨해튼 애비뉴를 따라 북쪽을 바라본다
 let camPitch = 0.26;
-let camDist = 7.5;
+let camDist = 6;
 let firstPerson = false;
 const MIN_DIST = 4, MAX_DIST = 26000;
 hud.onView(() => { firstPerson = !firstPerson; hud.setView(firstPerson); });
@@ -193,7 +194,7 @@ function frame(now: number) {
     }
   }
 
-  const inp = input.read();
+  const inp = input.read(dt);
   if (!started) {
     input.consumeJump();
     inp.moveX = inp.moveY = inp.lookYaw = inp.lookPitch = 0;

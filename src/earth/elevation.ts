@@ -59,8 +59,8 @@ export const FEATURES: Feature[] = [
   { lat: 27.8856, lon: 87.0886, meters: 8485, radius: 4 }, // 마칼루
   { lat: 35.8825, lon: 76.5133, meters: 8611, radius: 6 }, // K2
   { lat: 11.3733, lon: 142.5917, meters: -10935, radius: 10 }, // 챌린저 해연
-  { lat: 35.3606, lon: 138.7274, meters: 3776, radius: 18, cone: true }, // 후지산
-  { lat: -3.0674, lon: 37.3556, meters: 5895, radius: 16, cone: true }, // 킬리만자로
+  { lat: 35.3606, lon: 138.7274, meters: 3776, radius: 28, cone: true }, // 후지산. 높이 과장 아래에서도 약 32° 원뿔
+  { lat: -3.0674, lon: 37.3556, meters: 5895, radius: 43, cone: true }, // 킬리만자로. 후지산과 같은 경사
   { lat: 45.8326, lon: 6.8652, meters: 4806, radius: 6 }, // 몽블랑
   { lat: 63.0695, lon: -151.007, meters: 6190, radius: 8 }, // 데날리
   { lat: -32.6532, lon: -70.0109, meters: 6961, radius: 8 }, // 아콩카과
