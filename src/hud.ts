@@ -33,7 +33,7 @@ export const hud = {
   },
 
   setMuted(m: boolean) {
-    muteBtn.textContent = m ? '소리 꺼짐 (M)' : '소리 켜짐 (M)';
+    muteBtn.textContent = touch ? (m ? '소리 꺼짐' : '소리') : (m ? '소리 꺼짐 (M)' : '소리 켜짐 (M)');
     muteBtn.classList.toggle('on', m);
   },
 
@@ -47,6 +47,7 @@ export const hud = {
   },
 
   onFast(cb: () => void) {
+    if (touch) timeBtn.textContent = '시간';
     timeBtn.addEventListener('click', cb);
     addEventListener('keydown', (e) => { if (e.code === 'KeyT' && !e.repeat) cb(); });
   },

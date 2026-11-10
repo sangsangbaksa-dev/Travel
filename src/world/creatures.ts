@@ -150,16 +150,22 @@ export class CreatureField {
         const radius = animal.bird ? 3.5 : 1.1;
         let x = animal.x + Math.cos(t) * radius;
         let z = animal.z + Math.sin(t) * radius;
-        if (time >= animal.nextGroundSample) {
+        const hop = animal.species === 'rabbit' ? Math.abs(Math.sin(time * 2 + animal.phase)) * 0.05 : 0;
+        // 새는 커진 수관(약 7~11) 위로 난다. 땅 동물은 발밑 지면을 매 프레임 따라 파고들거나 뜨지 않는다.
+        const altitude = animal.bird ? 10.5 + Math.sin(time * 1.6 + animal.phase) * 0.45 : hop;
+        if (animal.bird) {
+          if (time >= animal.nextGroundSample) {
+            animal.groundY = Math.max(this.terrain.height(x, z), waterHeightAt(this.terrain, x, z));
+            animal.nextGroundSample = time + 0.15;
+          }
+        } else {
           const height = this.terrain.height(x, z);
           const water = waterHeightAt(this.terrain, x, z);
-          animal.overWater = !animal.bird && height < water + 0.15;
+          animal.overWater = height < water + 0.15;
+          if (animal.overWater) { x = animal.x; z = animal.z; }
           animal.groundY = animal.overWater ? this.terrain.height(animal.x, animal.z) : Math.max(height, water);
-          // 비싼 지형 샘플은 초당 약 7번이면 작은 동물의 느린 이동에 충분하다.
-          animal.nextGroundSample = time + 0.15;
         }
-        if (animal.overWater) { x = animal.x; z = animal.z; }
-        animal.group.position.set(x, animal.groundY + (animal.bird ? 4.5 + Math.sin(time * 1.6 + animal.phase) * 0.3 : animal.species === 'rabbit' ? Math.abs(Math.sin(time * 2 + animal.phase)) * 0.05 : 0), z);
+        animal.group.position.set(x, animal.groundY + altitude, z);
         animal.group.rotation.y = -t;
         if (animal.wings) animal.wings.forEach((wing, i) => { wing.rotation.z = (i === 0 ? 1 : -1) * Math.sin(time * 8 + animal.phase) * 0.55; });
       }

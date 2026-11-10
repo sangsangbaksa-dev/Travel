@@ -17,6 +17,8 @@ export class Input {
   private look = { yaw: 0, pitch: 0 };
   private active = false;
   private lastPointerType = '';
+  private suppressLook = false;
+  private resetStickVisual: () => void = () => {};
   readonly isTouch: boolean;
 
   constructor(private readonly canvas: HTMLElement, root: HTMLElement) {
@@ -29,7 +31,14 @@ export class Input {
       if (e.code === 'Space') this.jumpQueued = true;
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
-    addEventListener('blur', () => this.keys.clear());
+    addEventListener('blur', () => {
+      this.keys.clear();
+      this.jumpTouch = false;
+      this.diveTouch = false;
+      this.stick.x = this.stick.y = 0;
+      this.resetStickVisual();
+    });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     addEventListener('pointerdown', (e) => { this.lastPointerType = e.pointerType; }, true);
 
@@ -51,7 +60,12 @@ export class Input {
     document.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement === canvas) this.addLook(e.movementX * 0.005, e.movementY * 0.004);
     });
-    document.addEventListener('pointerlockchange', () => { dragging = false; });
+    document.addEventListener('pointerlockchange', () => {
+      dragging = false;
+      // 잠금이 걸리는 순간의 큰 movement 는 시점을 튀게 만든다
+      this.look.yaw = this.look.pitch = 0;
+      this.suppressLook = true;
+    });
 
     if (this.isTouch) this.buildTouchUi(root);
   }
@@ -59,6 +73,7 @@ export class Input {
   /** 시작 버튼이나 키 입력의 사용자 제스처 안에서 호출한다. */
   start() {
     this.active = true;
+    this.jumpQueued = false; // 시작에 쓴 Space 가 곧바로 점프가 되지 않게
     if (this.lastPointerType !== 'touch' && (this.lastPointerType === 'mouse' || matchMedia('(pointer: fine)').matches)) this.requestPointerLock();
   }
 
@@ -72,6 +87,7 @@ export class Input {
   }
 
   private addLook(yaw: number, pitch: number) {
+    if (this.suppressLook) { this.suppressLook = false; return; }
     this.look.yaw += yaw;
     this.look.pitch += pitch;
   }
@@ -98,9 +114,17 @@ export class Input {
       const k = len > R ? R / len : 1;
       dx *= k; dy *= k;
       knob.style.transform = `translate(${dx}px, ${dy}px)`;
-      this.stick.x = dx / R;
-      this.stick.y = -dy / R;
+      let nx = dx / R, ny = -dy / R;
+      const mag = Math.hypot(nx, ny);
+      const dead = 0.14;
+      if (mag < dead) { this.stick.x = this.stick.y = 0; }
+      else {
+        const scaled = Math.min(1, (mag - dead) / (1 - dead)) / mag;
+        this.stick.x = nx * scaled;
+        this.stick.y = ny * scaled;
+      }
     };
+    this.resetStickVisual = () => { knob.style.transform = 'translate(0,0)'; };
     base.addEventListener('pointerdown', (e) => {
       stickId = e.pointerId;
       base.setPointerCapture(e.pointerId);
@@ -142,7 +166,10 @@ export class Input {
     let lookId = -1, lx = 0, ly = 0;
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse') return;
+      // 왼쪽은 이동 스틱 영역. 빈 곳을 스쳐도 시점이 돌지 않게 오른쪽에서만 돌린다
+      if (e.clientX < window.innerWidth * 0.46) return;
       lookId = e.pointerId; lx = e.clientX; ly = e.clientY;
+      this.canvas.setPointerCapture(e.pointerId);
     });
     this.canvas.addEventListener('pointermove', (e) => {
       if (e.pointerType === 'mouse' || e.pointerId !== lookId) return;
@@ -169,7 +196,7 @@ export class Input {
     return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.diveTouch;
   }
 
-  read(): InputFrame {
+  read(dt = 1 / 60): InputFrame {
     const k = this.keys;
     let x = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     let y = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
@@ -180,7 +207,7 @@ export class Input {
     const yawKeys = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
     const frame: InputFrame = {
       moveX: x, moveY: y,
-      lookYaw: this.look.yaw + yawKeys * 0.04,
+      lookYaw: this.look.yaw + yawKeys * 1.7 * dt,
       lookPitch: this.look.pitch,
     };
     this.look.yaw = 0;

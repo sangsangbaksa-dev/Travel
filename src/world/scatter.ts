@@ -112,8 +112,9 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
     let obj: WorldObj;
     if (kindRoll < 0.12) {
       if (accept > 0.4) continue;
-      const scale = 0.7 + scaleRoll * 1.1;
-      obj = { kind: 'rock', x, z, y, scale, rot, variant: 0, biome, r: 0.8 * scale, top: y + 0.55 * scale };
+      // 반지름 1 메시를 세로 0.55로 납작하게 그린 뒤 바닥에 앉히므로, 보이는 높이는 1.1 * scale
+      const scale = 0.55 + scaleRoll * 0.75;
+      obj = { kind: 'rock', x, z, y, scale, rot, variant: 0, biome, r: 0.85 * scale, top: y + 1.1 * scale };
     } else {
       if (y > 16) continue; // 산꼭대기에는 나무가 없다
       const forest = smoothstep(-0.05, 0.35, noise2(x * 0.02, z * 0.02, seed + 9));
@@ -121,13 +122,20 @@ export function generateChunkObjects(t: Terrain, cx: number, cz: number, seed = 
       if (accept > base + k * forest) continue;
       const variant = pickVariant(biome, variantRoll);
       const magical = variant >= VARIANT.crystalViolet;
-      const scale = variant === VARIANT.pine ? 1.0 + scaleRoll * 0.7 : magical ? 0.9 + scaleRoll * 1.1 : 0.8 + scaleRoll * 0.8;
+      // 기본 메시 높이가 약 3이므로, 이 배율이면 사람 키(1)보다 확실히 큰 나무·선인장이 된다
+      const scale = variant === VARIANT.pine ? 2.35 + scaleRoll * 1.25
+        : variant === VARIANT.palm ? 2.15 + scaleRoll * 0.95
+        : variant === VARIANT.cactus ? 1.45 + scaleRoll * 0.7
+        : magical ? 1.7 + scaleRoll * 1.05
+        : 2.05 + scaleRoll * 1.05;
+      // 충돌은 줄기 굵기만 따른다. 수관까지 막으면 커진 나무 사이를 지나갈 수 없다
+      const hit = Math.min(scale, 1.45);
       const r =
-        variant === VARIANT.cactus ? 0.35 * scale
-        : variant === VARIANT.palm ? 0.28 * scale
-        : variant <= VARIANT.crystalPink && variant >= VARIANT.crystalViolet ? 0.5 * scale
-        : variant >= VARIANT.mushroomRed ? 0.3 * scale
-        : 0.32 * scale;
+        variant === VARIANT.cactus ? 0.35 * hit
+        : variant === VARIANT.palm ? 0.28 * hit
+        : variant <= VARIANT.crystalPink && variant >= VARIANT.crystalViolet ? 0.5 * hit
+        : variant >= VARIANT.mushroomRed ? 0.3 * hit
+        : 0.32 * hit;
       obj = { kind: 'tree', x, z, y, scale, rot, variant, biome, r, top: Infinity };
     }
     if (out.some((o) => Math.hypot(o.x - obj.x, o.z - obj.z) < o.r + obj.r + 0.8)) continue;
@@ -170,9 +178,18 @@ export class ObjectCache {
         for (const [i, [dx, dz]] of (style === 2 ? CITY_BUILDING_OFFSETS : BUILDING_OFFSETS).entries()) {
           const bx = place.x + dx, bz = place.z + dz;
           if (Math.abs(bx - x) > CHUNK * 2 || Math.abs(bz - z) > CHUNK * 2) continue;
-          const base = Math.max(this.terrain.height(bx, bz), this.terrain.waterLevel ?? -Infinity);
+          const water = this.terrain.waterLevel ?? -Infinity;
+          const sample = (dx: number, dz: number) => Math.max(this.terrain.height(bx + dx, bz + dz), water);
+          const base = sample(0, 0);
+          let low = base, high = base;
+          const hw = style === 2 ? 2.2 : 1.85, hd = 1.8;
+          for (const sdx of [-hw, hw]) for (const sdz of [-hd, hd]) {
+            const h = sample(sdx, sdz);
+            low = Math.min(low, h);
+            high = Math.max(high, h);
+          }
           const height = style === 2 ? (i >= 8 ? 9 + (i % 3) * 1.5 : 5 + (i % 3) * 1.3) : 2.7 + (i % 2) * .5;
-          this.near3.push({ kind: 'tree', x: bx, z: bz, y: base, scale: 1, rot: 0, variant: 0, biome: 0, r: style === 2 ? 2.35 : 2.1, top: Infinity, collisionBottom: base - 0.5, collisionTop: base + height + 2.1 });
+          this.near3.push({ kind: 'tree', x: bx, z: bz, y: high, scale: 1, rot: 0, variant: 0, biome: 0, r: style === 2 ? 2.35 : 2.1, top: Infinity, collisionBottom: low - 0.15, collisionTop: high + height + 2.1 });
         }
       });
     }

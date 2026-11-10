@@ -41,13 +41,8 @@ export class Residents {
       const t = time * 0.12 + resident.phase;
       const x = resident.x + Math.cos(t) * resident.radius;
       const z = resident.z + Math.sin(t) * resident.radius;
-      if (time >= resident.nextGroundSample) {
-        // 포석은 각 타일 중심의 지면 또는 수면 위에 놓인다.
-        const tileX = resident.x + Math.round((x - resident.x) / 1.25) * 1.25;
-        const tileZ = resident.z + Math.round((z - resident.z) / 1.25) * 1.25;
-        resident.groundY = Math.max(this.terrain.height(tileX, tileZ), this.terrain.waterLevel ?? -Infinity) + 0.07;
-        resident.nextGroundSample = time + 0.2;
-      }
+      // 발밑 지면을 바로 밟는다. 타일 높이를 가끔만 보면 비탈에서 뜨거나 파고든다.
+      resident.groundY = Math.max(this.terrain.height(x, z), this.terrain.waterLevel ?? -Infinity) + 0.08;
       resident.mesh.position.set(x, resident.groundY + Math.abs(Math.sin(time * 3 + resident.phase)) * 0.08, z);
       resident.mesh.rotation.y = -t;
     }

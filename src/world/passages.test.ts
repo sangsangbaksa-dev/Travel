@@ -23,10 +23,10 @@ describe('지형에 이어진 동굴과 계단', () => {
   });
   it('긴 계단을 따라 실제로 높이 올라가고 같은 길로 내려온다', () => {
     const world = new PhysicsWorld(terrain, 12, 0);
-    walk(world, -1, 1450);
+    walk(world, -1, 1850);
     expect(world.state.z).toBeLessThan(-190);
     expect(world.state.y).toBeGreaterThan(65);
-    walk(world, 1, 1450);
+    walk(world, 1, 1850);
     expect(world.state.z).toBeGreaterThan(-6);
     expect(world.state.y).toBeLessThan(8);
   });
@@ -37,7 +37,7 @@ describe('지형에 이어진 동굴과 계단', () => {
     expect(cave.state.z).toBeLessThan(-50);
     expect(cave.state.inWater).toBe(false);
     const stairs = new PhysicsWorld(actual, 12, 0);
-    walk(stairs, -1, 1450);
+    walk(stairs, -1, 1850);
     expect(stairs.state.z).toBeLessThan(-190);
     expect(stairs.state.y).toBeGreaterThan(65);
   });
@@ -45,7 +45,7 @@ describe('지형에 이어진 동굴과 계단', () => {
   it('낮은 암반을 파낸 굴이 입구에서 막다른 끝까지 마른 상태를 유지한다', () => {
     const actual = createPassageTerrain(createTerrain(1337));
     const player = new PhysicsWorld(actual, CAVE.x, 0, { near: caveObstacles });
-    for (let i = 0; i < 1080; i++) {
+    for (let i = 0; i < 1600; i++) {
       walk(player, -1, 1);
       expect(player.state.inWater).toBe(false);
     }

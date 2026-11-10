@@ -128,12 +128,12 @@ export class Passages {
     }
     this.group.add(caveRoof(terrain), steps);
     // 구름 위 전망대: 계단의 끝과 같은 지면에 놓인다.
-    const summitY = terrain.height(SKY_X, -202);
     const columnGeo = new THREE.CylinderGeometry(.34, .4, 4, 10);
     const marble = new THREE.MeshLambertMaterial({ color: '#e8e1d0' });
     for (const dx of [-5, 5]) for (const dz of [-5, 5]) {
       const column = new THREE.Mesh(columnGeo, marble);
-      column.position.set(SKY_X + dx, summitY + 2, -202 + dz);
+      const foot = terrain.height(SKY_X + dx, -202 + dz);
+      column.position.set(SKY_X + dx, foot + 2, -202 + dz);
       this.group.add(column);
     }
   }
