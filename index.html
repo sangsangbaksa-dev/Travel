@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>큐브 어스</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ff9eb5'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
@@ -110,7 +111,7 @@
       position: fixed; inset: 0; display: grid; place-items: center; z-index: 20;
       padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px));
       background: radial-gradient(ellipse at center, rgba(255, 255, 255, .15), rgba(223, 241, 255, .55));
-      transition: opacity .5s; touch-action: none;
+      transition: opacity .5s; touch-action: pan-y; overflow-y: auto;
     }
     .start.hidden { opacity: 0; pointer-events: none; }
     .card {
@@ -132,6 +133,20 @@
       display: flex; flex-direction: column; gap: 6px;
     }
     .zoom .pill { width: 38px; height: 34px; justify-content: center; font-size: 18px; padding: 0; }
+
+    @media (max-height: 760px) {
+      .card { padding: 12px 14px 10px; }
+      .card h1 { font-size: 32px; }
+      .keys { margin-top: 8px; gap: 3px; }
+      .keys li { padding: 4px 10px; }
+      .startbtn { margin-top: 10px; padding: 8px 28px; font-size: 20px; }
+    }
+    @media (max-height: 480px) {
+      .stick { width: 92px; height: 92px; }
+      .jumpbtn { width: 64px; height: 64px; font-size: 16px; }
+      .divebtn { width: 48px; height: 48px; font-size: 13px; bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 88px)); }
+      .runbtn { width: 52px; height: 52px; font-size: 13px; }
+    }
 
     @media (prefers-reduced-motion: reduce) {
       .toast, .start { animation: none; transition: none; }
