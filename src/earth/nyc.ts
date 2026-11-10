@@ -11,8 +11,11 @@ import { noise3 } from './noise3';
 // 좌표: e(동), n(북). 맨해튼 격자는 북쪽에서 29° 기울어져 있다 → s(섬 방향), t(섬을 가로지르는 방향).
 
 export const NYC = { lat: 40.758, lon: -73.9855, name: '뉴욕' } as const;
-export const NYC_RADIUS = 175;
-const BLEND_END = 215;
+/** 도시 좌표 1칸이 행성 몇 칸(m)인가 (가로), 건물 높이 배율 (세로). 큐브 = 1m, 건물은 실제 높이 */
+const K = 6;
+const V = 12;
+export const NYC_RADIUS = 175 * K;
+const BLEND_END = 215 * K;
 export const STREET_Y = 0.6;
 const ANG = 29 * Math.PI / 180;
 const DS = { e: Math.sin(ANG), n: Math.cos(ANG) }; // 섬 방향 (북북동)
@@ -29,8 +32,8 @@ const smooth = (a: number, b: number, x: number) => {
   const u = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return u * u * (3 - 2 * u);
 };
-const st = (e: number, n: number) => ({ s: e * DS.e + n * DS.n, t: e * DT.e + n * DT.n });
-const en = (s: number, t: number) => ({ e: s * DS.e + t * DT.e, n: s * DS.n + t * DT.n });
+const st = (e: number, n: number) => ({ s: (e * DS.e + n * DS.n) / K, t: (e * DT.e + n * DT.n) / K });
+const en = (s: number, t: number) => ({ e: (s * DS.e + t * DT.e) * K, n: (s * DS.n + t * DT.n) * K });
 
 /** 맨해튼 섬 안쪽으로 얼마나 들어와 있는가 (양수면 섬) */
 function manhattan(s: number, t: number): number {
@@ -55,7 +58,7 @@ export function nycHeight(e: number, n: number, real: number, d: number): number
   if (land >= 0) {
     h = 0.22 + (STREET_Y - 0.22) * smooth(0, 1.4, land);
     // 맨해튼 밖의 땅은 살짝 굽이친다
-    if (manhattan(s, t) < 1.4) h += Math.max(0, noise3(e / 23, n / 23, 3.1)) * 0.6 * smooth(3, 12, land);
+    if (manhattan(s, t) < 1.4) h += Math.max(0, noise3(e / (23 * K), n / (23 * K), 3.1)) * 0.6 * smooth(3, 12, land);
   } else {
     const depth = -2.6 - smooth(-45, -110, s) * 5.5;
     h = 0.22 + (depth - 0.22) * smooth(0, 2.4, -land);
@@ -130,7 +133,7 @@ function boxGeometry(w: number, h: number, d: number, windows: boolean, taper = 
     if (Math.abs(ny) > 0.5 || !windows) uv.setXY(i, 0.01, 0.01);
     else {
       const along = Math.abs(nx) > 0.5 ? z : x;
-      uv.setXY(i, (along + 50) / 2.4, (y + h / 2) / 2.2);
+      uv.setXY(i, (along + 500) / 24, (y + h / 2) / 28);
     }
     if (taper !== 1 && y > 0) pos.setXYZ(i, x * taper, y, z * taper);
   }
@@ -148,6 +151,8 @@ export class NewYork {
   private readonly frame = new THREE.Matrix4();
   private readonly dummy = new THREE.Object3D();
   private readonly glow: THREE.MeshBasicMaterial;
+  /** 카메라가 파고들지 않게 막는 건물 메시 */
+  buildings: THREE.Mesh | null = null;
 
   constructor() {
     this.frame.makeBasis(this.plane.east, this.plane.up, this.plane.north.clone().negate());
@@ -211,7 +216,7 @@ export class NewYork {
           }
         }
         // 블록 보도 (올라설 수 있는 낮은 단)
-        out.push({ s: sm, t: (t0 + t1) / 2, ls: s1 - s0 + 0.5, lt: t1 - t0 + 0.5, h: 0.14, color: new THREE.Color('#9d9a93') });
+        out.push({ s: sm, t: (t0 + t1) / 2, ls: s1 - s0 + 0.5, lt: t1 - t0 + 0.5, h: 0.15 / V, color: new THREE.Color('#9d9a93') });
       }
     }
     // 브루클린·퀸스·뉴저지·브롱크스: 낮은 건물이 늘어선 동네
@@ -219,7 +224,7 @@ export class NewYork {
       for (let t = -90; t < 90; t += 6) {
         const p = en(s, t);
         const d = Math.hypot(p.e, p.n);
-        if (d > NYC_RADIUS - 25 || manhattan(s, t) > -3) continue;
+        if (d > NYC_RADIUS - 25 * K || manhattan(s, t) > -3) continue;
         const land = Math.min(nycLand(s - 2, t - 2), nycLand(s + 2, t + 2), nycLand(s - 2, t + 2), nycLand(s + 2, t - 2));
         if (land < 1.2 || rnd() < 0.18) continue;
         const near = Math.min(Math.abs(t + 27), Math.abs(t - 20));
@@ -236,9 +241,9 @@ export class NewYork {
     const rot = new THREE.Matrix4().makeRotationY(-(Math.PI / 2 - ANG)); // 상자 x축 → 가로(t) 방향
     const axis = this.axisT();
     for (const b of boxes) {
-      const g = boxGeometry(b.lt, b.h, b.ls, !!b.windows, b.taper);
+      const g = boxGeometry(b.lt * K, b.h * V, b.ls * K, !!b.windows, b.taper);
       g.applyMatrix4(rot);
-      this.localXYZ(b.s, b.t, STREET_Y + (b.y0 ?? 0), v);
+      this.localXYZ(b.s, b.t, STREET_Y + (b.y0 ?? 0) * V, v);
       g.translate(v.x, v.y, v.z);
       const n = g.attributes.position.count;
       const col = new Float32Array(n * 3);
@@ -248,7 +253,7 @@ export class NewYork {
       if (!b.y0) {
         this.obstacles.push({
           p: this.worldAt(b.s, b.t, STREET_Y, new THREE.Vector3()), r: 0,
-          box: { hx: b.lt / 2, hz: b.ls / 2, axis }, height: b.h, walkable: true,
+          box: { hx: b.lt / 2 * K, hz: b.ls / 2 * K, axis }, height: b.h * V, walkable: true,
         });
       }
     }
@@ -256,22 +261,31 @@ export class NewYork {
     mesh.matrixAutoUpdate = false;
     mesh.matrix.copy(this.frame);
     this.group.add(mesh);
+    this.buildings = mesh;
+  }
+
+  /** 카메라 위치가 도시 근처인가 */
+  near(p: THREE.Vector3): boolean {
+    return this.plane.local(p).d < NYC_RADIUS;
   }
 
   /** 섬 좌표 (s, t)에 지역 y-up 모델을 세운다. 모델의 -z가 섬의 북쪽(s)을 향한다 */
   private place(obj: THREE.Object3D, s: number, t: number, y = STREET_Y, turn = 0) {
-    const v = this.localXYZ(s, t, y, new THREE.Vector3());
-    obj.position.copy(v);
-    obj.rotation.y = -ANG + turn;
+    // 모델은 도시 좌표 단위로 만들었으므로 가로 K, 세로 V배로 키운다
+    const scaler = new THREE.Group();
+    this.localXYZ(s, t, y, scaler.position);
+    scaler.rotation.y = -ANG + turn;
+    scaler.scale.set(K, V, K);
+    scaler.add(obj);
     const holder = new THREE.Group();
     holder.matrixAutoUpdate = false;
     holder.matrix.copy(this.frame);
-    holder.add(obj);
+    holder.add(scaler);
     this.group.add(holder);
   }
 
   private solid(s: number, t: number, ls: number, lt: number, h: number, y = STREET_Y) {
-    this.obstacles.push({ p: this.worldAt(s, t, y, new THREE.Vector3()), r: 0, box: { hx: lt / 2, hz: ls / 2, axis: this.axisT() }, height: h, walkable: true });
+    this.obstacles.push({ p: this.worldAt(s, t, y, new THREE.Vector3()), r: 0, box: { hx: lt / 2 * K, hz: ls / 2 * K, axis: this.axisT() }, height: h * V, walkable: true });
   }
 
   private buildLandmarks() {
@@ -341,8 +355,8 @@ export class NewYork {
     flame.name = 'flame';
     add(lady, new THREE.BoxGeometry(0.16, 0.28, 0.06), copper, -0.3, 5.9, -0.18); // 독립선언서 서판
     this.place(lady, LIBERTY.s, LIBERTY.t, 0.5, Math.PI * 0.75);
-    this.obstacles.push({ p: this.worldAt(LIBERTY.s, LIBERTY.t, 0.5, new THREE.Vector3()), r: 2.35, height: 0.7, walkable: true });
-    this.obstacles.push({ p: this.worldAt(LIBERTY.s, LIBERTY.t, 0.5, new THREE.Vector3()), r: 1.1, height: 3.8, walkable: true });
+    this.obstacles.push({ p: this.worldAt(LIBERTY.s, LIBERTY.t, 0.5, new THREE.Vector3()), r: 2.35 * K, height: 0.7 * V, walkable: true });
+    this.obstacles.push({ p: this.worldAt(LIBERTY.s, LIBERTY.t, 0.5, new THREE.Vector3()), r: 1.1 * K, height: 3.8 * V, walkable: true });
 
     // 타임스스퀘어: 빛나는 전광판 (글자 없는 색면)
     const boards = new THREE.Group();
@@ -366,7 +380,7 @@ export class NewYork {
 
   private buildPark() {
     const rnd = mulberry(77);
-    const trunk = new THREE.CylinderGeometry(0.08, 0.12, 0.9, 5).translate(0, 0.45, 0);
+    const trunk = new THREE.CylinderGeometry(0.08, 0.12, 0.9, 5).translate(0, 0.45, 0).toNonIndexed();
     const crown = new THREE.IcosahedronGeometry(0.75, 0).translate(0, 1.35, 0);
     const pos = trunk.attributes.position.count, cpos = crown.attributes.position.count;
     const paint = (g: THREE.BufferGeometry, c: string, n: number) => {
@@ -390,10 +404,10 @@ export class NewYork {
       this.localXYZ(p.s, p.t, STREET_Y, v);
       this.dummy.position.copy(v);
       this.dummy.rotation.set(0, rnd() * 6.28, 0);
-      this.dummy.scale.setScalar(0.8 + rnd() * 0.6);
+      this.dummy.scale.setScalar((0.8 + rnd() * 0.6) * 8);
       this.dummy.updateMatrix();
       mesh.setMatrixAt(i, this.dummy.matrix);
-      this.obstacles.push({ p: this.worldAt(p.s, p.t, STREET_Y, new THREE.Vector3()), r: 0.18, height: 2, walkable: false });
+      this.obstacles.push({ p: this.worldAt(p.s, p.t, STREET_Y, new THREE.Vector3()), r: 1.2, height: 16, walkable: false });
     });
     mesh.matrixAutoUpdate = false;
     mesh.matrix.copy(this.frame);
@@ -408,9 +422,10 @@ export class NewYork {
   /** 보도를 오가는 큐브 사람들 */
   private buildPeople() {
     const rnd = mulberry(31);
-    const body = new RoundedBoxGeometry(0.62, 0.62, 0.62, 2, 0.1).translate(0, 0.31, 0);
-    const eye = new THREE.SphereGeometry(0.045, 6, 5);
-    const eyes = mergeGeometries([eye.clone().translate(-0.12, 0.38, 0.312), eye.clone().translate(0.12, 0.38, 0.312)]);
+    // 사람 = 주인공처럼 1m 큐브
+    const body = new RoundedBoxGeometry(1, 1, 1, 2, 0.15).translate(0, 0.5, 0);
+    const eye = new THREE.SphereGeometry(0.075, 6, 5);
+    const eyes = mergeGeometries([eye.clone().translate(-0.2, 0.58, 0.502), eye.clone().translate(0.2, 0.58, 0.502)]).toNonIndexed();
     const col = new Float32Array(body.attributes.position.count * 3).fill(1);
     body.setAttribute('color', new THREE.BufferAttribute(col, 3));
     const ecol = new Float32Array(eyes.attributes.position.count * 3).fill(-1);
@@ -422,11 +437,11 @@ export class NewYork {
       sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         if (vColor.r < 0.0) diffuseColor.rgb = vec3(0.06, 0.06, 0.08);`);
       sh.vertexShader = sh.vertexShader.replace('#include <color_vertex>', `#include <color_vertex>
-        if (color.r < 0.0) vColor = vec3(-1.0);`);
+        if (color.r < 0.0) vColor.rgb = vec3(-1.0);`);
     };
     const walkers: { s: number; t: number; ds: number; dt: number; len: number; phase: number; speed: number }[] = [];
     const shirt = ['#e8b48a', '#7fb3d5', '#e57373', '#9ccc65', '#ffd54f', '#ba68c8', '#4db6ac', '#f5f5f5', '#455a64', '#ff8a65'];
-    const count = 170;
+    const count = 320;
     while (walkers.length < count) {
       const alongAve = rnd() < 0.6;
       let s: number, t: number;
@@ -441,7 +456,7 @@ export class NewYork {
       }
       if (manhattan(s, t) < 1.5) continue;
       if (s > PARK.s0 && s < PARK.s1 && Math.abs(t) < 5) continue;
-      walkers.push({ s, t, ds: alongAve ? 1 : 0, dt: alongAve ? 0 : 1, len: 3 + rnd() * 9, phase: rnd() * 100, speed: 0.6 + rnd() * 0.7 });
+      walkers.push({ s, t, ds: alongAve ? 1 : 0, dt: alongAve ? 0 : 1, len: 3 + rnd() * 9, phase: rnd() * 100, speed: (1.1 + rnd() * 0.6) / K });
     }
     const mesh = new THREE.InstancedMesh(geo, mat, count);
     const c = new THREE.Color();
@@ -456,8 +471,9 @@ export class NewYork {
   /** 애비뉴를 달리는 노란 택시와 차들 */
   private buildCars() {
     const rnd = mulberry(91);
-    const geo = new THREE.BoxGeometry(0.62, 0.42, 1.3).translate(0, 0.32, 0);
-    const cabin = new THREE.BoxGeometry(0.56, 0.3, 0.7).translate(0, 0.66, 0.05);
+    // 실제 크기의 차 (길이 약 4.5m)
+    const geo = new THREE.BoxGeometry(1.85, 1.0, 4.5).translate(0, 0.75, 0);
+    const cabin = new THREE.BoxGeometry(1.7, 0.75, 2.3).translate(0, 1.6, 0.2);
     const car = mergeGeometries([geo, cabin]);
     const mesh = new THREE.InstancedMesh(car, new THREE.MeshLambertMaterial(), 90);
     const list: { t: number; s: number; dir: number; speed: number }[] = [];
@@ -465,7 +481,7 @@ export class NewYork {
     for (let i = 0; i < 90; i++) {
       const k = Math.floor(rnd() * 5);
       const dir = k % 2 === 0 ? 1 : -1; // 일방통행
-      list.push({ t: -HALF_W + 1.5 - ROAD / 2 + k * AVE_PITCH + dir * 0.4, s: S_SOUTH + rnd() * (S_NORTH - S_SOUTH), dir, speed: 3 + rnd() * 3 });
+      list.push({ t: -HALF_W + 1.5 - ROAD / 2 + k * AVE_PITCH + dir * 0.4, s: S_SOUTH + rnd() * (S_NORTH - S_SOUTH), dir, speed: (9 + rnd() * 6) / K });
       mesh.setColorAt(i, c.set(rnd() < 0.55 ? '#f4c20d' : ['#e0e0e0', '#2b2f36', '#8a1c1c', '#30475e'][Math.floor(rnd() * 4)]));
     }
     mesh.matrixAutoUpdate = false;
@@ -498,7 +514,7 @@ export class NewYork {
       const s = w.s + w.ds * off, t = w.t + w.dt * off;
       const forward = u < 1 ? 1 : -1;
       const heading = w.ds ? (forward > 0 ? Math.PI : 0) : (forward > 0 ? -Math.PI / 2 : Math.PI / 2);
-      const hop = Math.abs(Math.sin(time * 9 * w.speed + w.phase)) * 0.06;
+      const hop = Math.abs(Math.sin(time * 7 + w.phase)) * 0.08;
       mesh.setMatrixAt(i, this.pose(s, t, STREET_Y + hop, heading));
     });
     mesh.instanceMatrix.needsUpdate = true;

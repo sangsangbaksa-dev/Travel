@@ -9,10 +9,16 @@ import { dirFace, faceDir } from './terrain';
 // 나무: 큐브 스피어 면 좌표의 촘촘한 격자(약 2칸)마다 해시로 한 그루씩 심을지 정한다.
 // 같은 좌표면 언제나 같은 결과라서 렌더링과 충돌이 일치한다. 플레이어 근처 타일만 만든다.
 
-const CELL = 2 / 4096;
+const CELL = 2 / 1024;
 const TILE = 32;
-const VIEW = 190;
+const VIEW = 420;
 const KINDS = [TREE.broadleaf, TREE.conifer, TREE.palm, TREE.birch, TREE.shrub] as const;
+/** 종류별 실제 크기 배율: treeGeometry는 약 3~4 단위이고 1 단위 = 1 m */
+const KIND_SCALE: Partial<Record<TreeKind, number>> = {
+  [TREE.broadleaf]: 4, [TREE.conifer]: 4.5, [TREE.palm]: 3.4, [TREE.birch]: 4, [TREE.shrub]: 2.5,
+};
+/** 나무 키(충돌 높이, m) */
+const TREE_HEIGHT = 15;
 /** 줄기 색 표시: 정점 색 r이 음수면 셰이더가 줄기 색으로 칠한다 */
 const TRUNK = -1;
 
@@ -94,7 +100,7 @@ export class Vegetation implements WorldObstacleSource {
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.material.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <color_vertex>', `#include <color_vertex>
-        if (color.r < 0.0) vColor = vec3(-1.0);`);
+        if (color.r < 0.0) vColor.rgb = vec3(-1.0);`);
       sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         if (vColor.r < 0.0) diffuseColor.rgb = vec3(0.16, 0.11, 0.07);`);
     };
@@ -135,7 +141,7 @@ export class Vegetation implements WorldObstacleSource {
     const n = new THREE.Vector3().crossVectors(up, e);
     const p = new THREE.Vector3();
     const list: { key: string; face: number; ti: number; tj: number; d: number }[] = [];
-    for (let y = -VIEW; y <= VIEW; y += 30) for (let x = -VIEW; x <= VIEW; x += 30) {
+    for (let y = -VIEW; y <= VIEW; y += 90) for (let x = -VIEW; x <= VIEW; x += 90) {
       const d = Math.hypot(x, y);
       if (d > VIEW) continue;
       p.copy(up).multiplyScalar(RADIUS).addScaledVector(e, x).addScaledVector(n, y).normalize();
@@ -168,7 +174,7 @@ export class Vegetation implements WorldObstacleSource {
       if (h < 0.35) continue;
       const lat = Math.asin(d.y) * 57.29577951308232, lon = Math.atan2(-d.z, d.x) * 57.29577951308232;
       samplePicture(planet.earth, lat, lon, this.col);
-      this.col[0] *= 1.35; this.col[1] *= 1.35; this.col[2] *= 1.35;
+      for (let c = 0; c < 3; c++) this.col[c] = Math.min(1, 1.75 * Math.pow(this.col[c], 0.86));
       const pre = vegetation(this.col, lat, h, 0);
       if (pre.kind === TREE.none || r0 > pre.density * 0.62) continue;
       // 비탈 확인
@@ -177,7 +183,7 @@ export class Vegetation implements WorldObstacleSource {
       if (slope > 1.1) continue;
       if (this.blocker.blocksVegetation(d)) continue;
       const kind = pre.kind;
-      const scale = 0.8 + hash(ci + 3, cj, face) * 0.75;
+      const scale = (0.8 + hash(ci + 3, cj, face) * 0.75) * (KIND_SCALE[kind] ?? 1);
       const base = d.clone().multiplyScalar(RADIUS + h - 0.05);
       this.q.setFromUnitVectors(this.up, d);
       const yaw = new THREE.Quaternion().setFromAxisAngle(this.up, hash(ci, cj + 5, face) * 6.283);
@@ -186,7 +192,7 @@ export class Vegetation implements WorldObstacleSource {
       if (!per.has(kind)) { per.set(kind, []); colors.set(kind, []); }
       per.get(kind)!.push(this.m.clone());
       colors.get(kind)!.push(this.leafColor(kind, lat, hash(cj, ci, face + 21)));
-      if (kind !== TREE.shrub) cells[j * TILE + i] = { p: base, r: 0.2 * scale };
+      if (kind !== TREE.shrub) cells[j * TILE + i] = { p: base, r: 0.15 * scale };
     }
     const meshes: THREE.InstancedMesh[] = [];
     for (const [kind, mats] of per) {
@@ -224,13 +230,13 @@ export class Vegetation implements WorldObstacleSource {
     const dir = this.tmp.copy(p).normalize();
     const f = dirFace(dir);
     const ci = Math.floor((f.a + 1) / CELL), cj = Math.floor((f.b + 1) / CELL);
-    const reach = Math.ceil(radius / 1.8);
+    const reach = Math.ceil(radius / 7) + 1;
     for (let dj = -reach; dj <= reach; dj++) for (let di = -reach; di <= reach; di++) {
       const i = ci + di, j = cj + dj;
       const t = this.tiles.get(`${f.face}/${Math.floor(i / TILE)}/${Math.floor(j / TILE)}`);
       if (!t) continue;
       const cell = t.cells[(((j % TILE) + TILE) % TILE) * TILE + (((i % TILE) + TILE) % TILE)];
-      if (cell) out.push({ p: cell.p, r: cell.r, height: 3, walkable: false });
+      if (cell) out.push({ p: cell.p, r: cell.r, height: TREE_HEIGHT, walkable: false });
     }
   }
 }

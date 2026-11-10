@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import type { SkyState } from './cycle';
 
 // 카메라 주위에서 천천히 흘러가는 폭신한 구름. 카메라 기준으로 감아 돌려서 끝없이 이어진다.
-const COUNT = 46;
+const COUNT = 60;
 const PUFFS = 5;
-const RANGE = 420;
+const RANGE = 4200;
 const PLANET_R = 5157;
 const OFFSETS: [number, number, number, number][] = [
   [-1.2, 0, 0, 0.9], [0, 0.35, 0.2, 1.15], [1.3, 0, -0.1, 0.95], [0.4, -0.1, 0.9, 0.7], [-0.5, -0.05, -0.8, 0.75],
@@ -27,7 +27,7 @@ export class Clouds {
     for (let i = 0; i < COUNT; i++) {
       this.data.push({
         x: (rnd() * 2 - 1) * RANGE, z: (rnd() * 2 - 1) * RANGE,
-        y: 30 + rnd() * 22, s: 8 + rnd() * 12, speed: 1.2 + rnd() * 1.6,
+        y: 900 + rnd() * 400, s: 90 + rnd() * 110, speed: 1.2 + rnd() * 1.6,
       });
     }
     this.mesh = new THREE.InstancedMesh(
@@ -44,7 +44,8 @@ export class Clouds {
    * 걸어가면 구름이 뒤로 지나간다. 멀어질수록 행성 곡률만큼 내려앉는다.
    */
   update(time: number, sky: SkyState, odoX: number, odoZ: number, altitude: number) {
-    this.mesh.visible = altitude < 400;
+    // 구름층 가까이 올라가면 시야를 가리지 않도록 걷어 낸다
+    this.mesh.visible = altitude < 700;
     this.data.forEach((c, i) => {
       const x = wrap(c.x + time * c.speed - odoX);
       const z = wrap(c.z + time * c.speed * 0.35 - odoZ);

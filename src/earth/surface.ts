@@ -61,8 +61,9 @@ export function groundColor(
   } else {
     samplePicture(earth, lat, lon, out);
     // 사진은 하늘에서 본 색이라 어둡다. 땅에서 보는 밝기로 끌어올린다.
-    const boost = 1.35;
-    out[0] *= boost; out[1] *= boost; out[2] *= boost;
+    out[0] = Math.min(1, 1.75 * Math.pow(out[0], 0.86));
+    out[1] = Math.min(1, 1.75 * Math.pow(out[1], 0.86));
+    out[2] = Math.min(1, 1.75 * Math.pow(out[2], 0.86));
     // 해안의 모래사장
     const beach = 1 - smooth(0.1, 0.55, h);
     if (Math.abs(lat) < 62) mix(out, 0.62, 0.55, 0.38, beach * 0.7);
@@ -95,6 +96,7 @@ export function vegetation(color: number[], lat: number, h: number, slope: numbe
   const dark = 1 - smooth(0.12, 0.45, sum / 3);
   let density = smooth(0.36, 0.46, green) * (0.35 + 0.65 * dark);
   const treeLine = snowLine(lat) - 9;
+  if (h > treeLine) return { density: 0, kind: TREE.none };
   density *= 1 - smooth(treeLine - 6, treeLine, h);
   if (density < 0.02) {
     // 메마른 땅에도 드문드문 덤불

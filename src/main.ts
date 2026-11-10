@@ -56,6 +56,13 @@ const vegetation = new Vegetation(planet, landmarks);
 scene.add(vegetation.group);
 
 const body = new SphereBody(planet, landmarks.spawn);
+{
+  // 처음에는 북쪽을 기준으로 둔다 (지역 -Z = 북쪽)
+  const e = new THREE.Vector3(), n = new THREE.Vector3();
+  eastNorth(body.frame.up, e, n);
+  body.frame.z.copy(n).negate();
+  body.frame.moveTo(body.pos);
+}
 body.addObstacles(landmarks);
 body.addObstacles(vegetation);
 const cube = new Cube();
@@ -77,7 +84,7 @@ const input = new Input(renderer.domElement, app);
 const minimap = new Minimap(app, EARTH_IMAGE_URL, landmarks.marks);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.08, 60000);
 local.add(camera);
-let camYaw = 0.6;
+let camYaw = -0.5; // 맨해튼 애비뉴를 따라 북쪽을 바라본다
 let camPitch = 0.26;
 let camDist = 7.5;
 let firstPerson = false;
@@ -115,6 +122,7 @@ const east = new THREE.Vector3(), north = new THREE.Vector3();
 const lastPos = new THREE.Vector3();
 const feet = new THREE.Vector3();
 const tmp = new THREE.Vector3();
+const ray = new THREE.Raycaster();
 const horizonColor = new THREE.Color();
 const DEEP = new THREE.Color('#06202c');
 const SHALLOW = new THREE.Color('#2d7f8c');
@@ -155,13 +163,14 @@ hud.onStart(() => {
 for (const ev of ['pointerdown', 'keydown'] as const) addEventListener(ev, () => { if (started) audio.unlock(); });
 
 /** 지금 있는 곳의 이름 */
-function placeAt(dir: THREE.Vector3, h: number, inWater: boolean): string {
+/** h: 지형 높이(칸, 1칸 = 100m), above: 지형 위로 올라선 높이(m, 건물 옥상 등) */
+function placeAt(dir: THREE.Vector3, h: number, above: number, inWater: boolean): string {
   const ll = latLonFromDir(dir.x, dir.y, dir.z);
   const mark = landmarks.nameAt(dir);
   const country = countries.nameAt(ll.lat, ll.lon);
   const where = mark ? (country && country !== mark ? `${country} · ${mark}` : mark)
     : country ?? (inWater || h < 0 ? seaName(ll.lat, ll.lon) : '');
-  const m = Math.round(h * METERS_PER_HEIGHT);
+  const m = Math.round(h * METERS_PER_HEIGHT + Math.max(0, above));
   const alt = h < -0.3 ? `수심 ${(-m).toLocaleString('ko-KR')}m` : `해발 ${Math.max(0, m).toLocaleString('ko-KR')}m`;
   const ns = ll.lat >= 0 ? 'N' : 'S', ew = ll.lon >= 0 ? 'E' : 'W';
   return `${where || '지구'} · ${alt} · ${Math.abs(ll.lat).toFixed(1)}°${ns} ${Math.abs(ll.lon).toFixed(1)}°${ew}`;
@@ -262,7 +271,8 @@ function frame(now: number) {
   placeT -= dt;
   if (placeT <= 0) {
     placeT = 0.5;
-    const name = placeAt(view.up, s.inWater ? viewTerrain.height(0, 0) : s.groundY, s.inWater);
+    const terr = viewTerrain.height(0, 0);
+    const name = placeAt(view.up, s.inWater ? Math.max(terr, s.submerged ? terr : 0) : terr, s.inWater ? 0 : s.groundY - terr, s.inWater);
     if (name !== placeName) { placeName = name; hud.setPlace(name); }
   }
 
@@ -301,6 +311,22 @@ function frame(now: number) {
       if (s.submerged) camera.position.y = Math.min(camera.position.y, water - 0.1);
     }
     view.toWorld(0, camAlt + THREE.MathUtils.lerp(s.submerged ? 0.2 : 1.1, 0, space), 0, targetWorld);
+    // 빌딩 숲에서는 카메라가 벽 속으로 들어가지 않게 앞으로 당긴다
+    const city = landmarks.nyc.buildings;
+    if (city && dist < 120 && landmarks.nyc.near(targetWorld)) {
+      view.toWorld(camera.position.x, camera.position.y, camera.position.z, camWorld);
+      const toCam = tmp.subVectors(camWorld, targetWorld);
+      const len = toCam.length();
+      ray.set(targetWorld, toCam.divideScalar(len));
+      ray.far = len;
+      const hit = ray.intersectObject(city, false)[0];
+      if (hit) {
+        const k = Math.max(0.15, (hit.distance - 0.4) / len);
+        camera.position.y = camAlt + (camera.position.y - camAlt) * k;
+        camera.position.x *= k;
+        camera.position.z *= k;
+      }
+    }
   }
   camera.up.copy(view.up);
   camera.lookAt(targetWorld);

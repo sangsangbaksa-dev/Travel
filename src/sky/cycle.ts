@@ -94,6 +94,13 @@ export function sampleSky(timeOfDay: number): SkyState {
  * sunDir은 호출한 쪽이 실제 방향으로 바꿔 쓴다.
  */
 export function sampleSkyForSun(elevation: number, morning: boolean): SkyState {
-  const a = Math.asin(Math.max(-1, Math.min(1, elevation))) / (Math.PI * 2);
-  return sampleSky(morning ? 0.25 + a : 0.75 - a);
+  const e = Math.max(-1, Math.min(1, elevation));
+  // 해가 15°쯤만 떠도 한낮 하늘이 되도록 시각 축을 늘린다
+  const a = Math.max(-0.25, Math.min(0.25, (Math.asin(e) / (Math.PI * 2)) * 2.2));
+  const s = sampleSky(morning ? 0.25 + a : 0.75 - a);
+  s.elevation = e;
+  s.sunColor = mix(WARM, NOON, smooth(0, 0.35, e));
+  s.sunIntensity = smooth(-0.02, 0.18, e) * 1.25;
+  s.moonIntensity = smooth(-0.02, 0.22, -e) * 0.5;
+  return s;
 }

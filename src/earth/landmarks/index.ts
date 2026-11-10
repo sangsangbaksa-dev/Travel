@@ -24,18 +24,21 @@ interface Site {
   turn?: number;
 }
 
+/** 모델은 1칸 = 12m로 만들었다. 큐브(1m) 기준의 실제 크기로 키운다 */
+const MODEL_SCALE = 12;
+
 export const SITES: Site[] = [
-  { name: '에펠탑', lat: 48.8584, lon: 2.2945, radius: 30, model: 'eiffel', pad: 14, minY: 0.5 },
-  { name: '기자의 피라미드', lat: 29.9792, lon: 31.1342, radius: 60, model: 'pyramids', pad: 46, minY: 0.6 },
-  { name: '만리장성', lat: 40.354, lon: 116.02, radius: 80, model: 'greatWall' },
-  { name: '타지마할', lat: 27.1751, lon: 78.0421, radius: 30, model: 'tajMahal', pad: 18, minY: 0.6 },
-  { name: '콜로세움', lat: 41.8902, lon: 12.4922, radius: 25, model: 'colosseum', pad: 12, minY: 0.5 },
-  { name: '빅벤', lat: 51.5007, lon: -0.1246, radius: 30, model: 'bigBen', pad: 16, minY: 0.5 },
-  { name: '시드니 오페라 하우스', lat: -33.8568, lon: 151.2153, radius: 25, model: 'operaHouse', pad: 11, minY: 0.45 },
-  { name: '코르코바두 예수상', lat: -22.9519, lon: -43.2105, radius: 25, model: 'christ', hill: { height: 7, radius: 10 } },
-  { name: '부르즈 할리파', lat: 25.1972, lon: 55.2744, radius: 40, model: 'burjKhalifa', pad: 10, minY: 0.5 },
-  { name: 'N서울타워', lat: 37.5512, lon: 126.9882, radius: 25, model: 'nSeoulTower', hill: { height: 2.6, radius: 8 } },
-  { name: '타이타닉 난파선', lat: 41.7325, lon: -49.9469, radius: 40, model: 'titanic', pad: 22 },
+  { name: '에펠탑', lat: 48.8584, lon: 2.2945, radius: 400, model: 'eiffel', pad: 160, minY: 0.5 },
+  { name: '기자의 피라미드', lat: 29.9792, lon: 31.1342, radius: 700, model: 'pyramids', pad: 560, minY: 0.6 },
+  { name: '만리장성', lat: 40.354, lon: 116.02, radius: 900, model: 'greatWall' },
+  { name: '타지마할', lat: 27.1751, lon: 78.0421, radius: 400, model: 'tajMahal', pad: 220, minY: 0.6 },
+  { name: '콜로세움', lat: 41.8902, lon: 12.4922, radius: 300, model: 'colosseum', pad: 140, minY: 0.5 },
+  { name: '빅벤', lat: 51.5007, lon: -0.1246, radius: 400, model: 'bigBen', pad: 190, minY: 0.5 },
+  { name: '시드니 오페라 하우스', lat: -33.8568, lon: 151.2153, radius: 300, model: 'operaHouse', pad: 130, minY: 0.45 },
+  { name: '코르코바두 예수상', lat: -22.9519, lon: -43.2105, radius: 300, model: 'christ', hill: { height: 7, radius: 60 } },
+  { name: '부르즈 할리파', lat: 25.1972, lon: 55.2744, radius: 600, model: 'burjKhalifa', pad: 120, minY: 0.5 },
+  { name: 'N서울타워', lat: 37.5512, lon: 126.9882, radius: 300, model: 'nSeoulTower', hill: { height: 2.6, radius: 60 } },
+  { name: '타이타닉 난파선', lat: 41.7325, lon: -49.9469, radius: 400, model: 'titanic', pad: 260 },
   { name: '에베레스트', lat: 27.9881, lon: 86.925, radius: 14 },
   { name: '마리아나 해구 · 챌린저 해연', lat: 11.3733, lon: 142.5917, radius: 30 },
   { name: '후지산', lat: 35.3606, lon: 138.7274, radius: 30 },
@@ -84,7 +87,7 @@ export class Landmarks implements WorldObstacleSource {
           apply: (h, _e, _n, d) => Math.max(h, top - height * Math.pow(smooth(0, radius * 2.4, d), 0.7)),
         });
         // 꼭대기는 평평하게
-        el.addShaper({ plane, radius: 2.2, apply: (h, _e, _n, d) => top + (h - top) * smooth(1.2, 2.2, d) });
+        el.addShaper({ plane, radius: 24, apply: (h, _e, _n, d) => top + (h - top) * smooth(14, 24, d) });
       } else if (site.pad) {
         const pad = site.pad;
         base = Math.max(base, site.minY ?? -Infinity);
@@ -93,7 +96,7 @@ export class Landmarks implements WorldObstacleSource {
         this.blocks.push({ dir: plane.up.clone(), cos: Math.cos(pad * 1.2 / RADIUS) });
       }
       const model: LandmarkModel = site.model === 'greatWall'
-        ? buildGreatWall((x, z) => el.heightAt(plane.dir(x, -z)) - base)
+        ? buildGreatWall((x, z) => (el.heightAt(plane.dir(x * MODEL_SCALE, -z * MODEL_SCALE)) - base) / MODEL_SCALE)
         : LANDMARK_BUILDERS[site.model]();
       this.mount(model, plane, base, site.turn ?? 0);
     }
@@ -106,18 +109,20 @@ export class Landmarks implements WorldObstacleSource {
     const south = plane.north.clone().negate();
     holder.matrix.makeBasis(plane.east, plane.up, south).setPosition(plane.up.clone().multiplyScalar(RADIUS + base));
     model.group.rotation.y = turn;
+    model.group.scale.setScalar(MODEL_SCALE);
     holder.add(model.group);
     this.group.add(holder);
     for (const c of model.colliders) {
       // 지역 (x, z) → 회전 → 접평면 (동, 북)
       const cos = Math.cos(turn), sin = Math.sin(turn);
-      const x = c.x * cos + c.z * sin, z = -c.x * sin + c.z * cos;
+      const k = MODEL_SCALE;
+      const x = (c.x * cos + c.z * sin) * k, z = (-c.x * sin + c.z * cos) * k;
       const p = plane.dir(x, -z).multiplyScalar(RADIUS + base);
       const rot = (c.rot ?? 0) + turn;
       const axis = plane.east.clone().multiplyScalar(Math.cos(rot)).addScaledVector(plane.north, Math.sin(rot)).normalize();
       this.obstacles.push(c.r !== undefined && c.hx === undefined
-        ? { p, r: c.r, height: c.height, walkable: true }
-        : { p, r: 0, box: { hx: c.hx ?? 0.5, hz: c.hz ?? 0.5, axis }, height: c.height, walkable: true });
+        ? { p, r: c.r * k, height: c.height * k, walkable: true }
+        : { p, r: 0, box: { hx: (c.hx ?? 0.5) * k, hz: (c.hz ?? 0.5) * k, axis }, height: c.height * k, walkable: true });
     }
   }
 
