@@ -3,6 +3,7 @@ import type { SkyState } from './cycle';
 
 const DOME_R = 300;
 const SPRITE_R = 250;
+const WHITE = new THREE.Color('#ffffff');
 
 function softDisc(inner: number): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -41,14 +42,12 @@ export class Sky {
   readonly moonLight = new THREE.DirectionalLight('#a9b8ff', 0);
   readonly hemi = new THREE.HemisphereLight('#fff6ec', '#a8c8a0', 1.7);
   private readonly aurora: THREE.Mesh;
-  private readonly rainbow = new THREE.Group();
-  private readonly rainbowMats: THREE.MeshBasicMaterial[] = [];
   private readonly uAuroraTime = { value: 0 };
   private readonly uAuroraAlpha = { value: 0 };
   private readonly uTop = { value: new THREE.Color() };
   private readonly uHorizon = { value: new THREE.Color() };
 
-  constructor(private readonly scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, local: THREE.Object3D) {
     this.dome = new THREE.Mesh(
       new THREE.SphereGeometry(DOME_R, 32, 16),
       new THREE.ShaderMaterial({
@@ -75,12 +74,12 @@ export class Sky {
     (this.moonGlow.material as THREE.SpriteMaterial).color.set('#b8c4ff');
 
     // 별: 위쪽 반구에 흩뿌린다 (고정 시드)
-    const n = 450;
+    const n = 900;
     const pos = new Float32Array(n * 3);
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
     for (let i = 0; i < n; i++) {
-      const y = 0.08 + rnd() * 0.92;
+      const y = rnd() * 2 - 1;
       const a = rnd() * Math.PI * 2;
       const r = Math.sqrt(1 - y * y);
       pos.set([Math.cos(a) * r * 280, y * 280, Math.sin(a) * r * 280], i * 3);
@@ -119,42 +118,25 @@ export class Sky {
     this.aurora.renderOrder = -8;
     this.aurora.frustumCulled = false;
 
-    // 무지개: 해 반대편 하늘에 걸리는 일곱 빛깔 아치
-    ['#ff6b6b', '#ffa15c', '#ffe066', '#7fe08a', '#6cc6ff', '#7f8cff', '#c586ff'].forEach((color, i) => {
-      const m = new THREE.Mesh(
-        new THREE.RingGeometry(66 - i * 3.4, 69.2 - i * 3.4, 64, 1, 0, Math.PI),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, fog: false }),
-      );
-      m.renderOrder = -6;
-      this.rainbowMats.push(m.material as THREE.MeshBasicMaterial);
-      this.rainbow.add(m);
-    });
-    this.rainbow.frustumCulled = false;
-
-    scene.add(this.aurora, this.rainbow);
-    scene.add(this.dome, this.sunGlow, this.sunCore, this.moonGlow, this.moon, this.stars);
+    // 하늘 장식은 카메라가 든 지역 좌표계에, 빛은 행성 좌표계에 둔다
+    local.add(this.aurora, this.dome, this.sunGlow, this.sunCore, this.moonGlow, this.moon, this.stars);
     scene.add(this.sunLight, this.moonLight, this.hemi);
-    if (!scene.fog) scene.fog = new THREE.Fog('#dff1ff', 30, 92);
   }
 
-  update(camera: THREE.Camera, s: SkyState, time = 0) {
-    const p = camera.position;
+  /**
+   * @param p 카메라 위치 (지역 좌표)
+   * @param world 행성 좌표의 해 방향, 지금 서 있는 곳의 위쪽, 우주에 가까운 정도(0~1), 오로라 세기
+   */
+  update(p: THREE.Vector3, s: SkyState, time: number, world: { sun: THREE.Vector3; up: THREE.Vector3; space: number; aurora: number }) {
     for (const o of [this.dome, this.stars]) o.position.copy(p);
     this.aurora.position.set(p.x, p.y + 70, p.z);
     this.uAuroraTime.value = time;
-    this.uAuroraAlpha.value = 0;
+    this.uAuroraAlpha.value = world.aurora * (1 - world.space);
 
-    // 무지개는 해가 낮게 떠 있는 낮에, 해의 반대편에 나타난다
-    const sunLow = THREE.MathUtils.smoothstep(s.elevation, 0.1, 0.3) * (1 - THREE.MathUtils.smoothstep(s.elevation, 0.55, 0.85));
-    for (const m of this.rainbowMats) m.opacity = 0.42 * sunLow;
-    this.rainbow.visible = false;
-    const hl = Math.hypot(s.sunDir[0], s.sunDir[2]) || 1;
-    this.rainbow.position.set(p.x - (s.sunDir[0] / hl) * 210, p.y - 12, p.z - (s.sunDir[2] / hl) * 210);
-    this.rainbow.lookAt(p);
-
-    this.uTop.value.setRGB(...s.top);
-    this.uHorizon.value.setRGB(...s.horizon);
-    (this.scene.fog as THREE.Fog).color.setRGB(...s.horizon);
+    // 높이 올라갈수록 하늘이 검은 우주로 바뀐다
+    const air = 1 - world.space;
+    this.uTop.value.setRGB(...s.top).multiplyScalar(air);
+    this.uHorizon.value.setRGB(...s.horizon).multiplyScalar(air);
 
     const [dx, dy, dz] = s.sunDir;
     const place = (o: THREE.Object3D, sign: number) =>
@@ -164,25 +146,27 @@ export class Sky {
     place(this.moon, -1);
     place(this.moonGlow, -1);
 
-    const sunVis = THREE.MathUtils.clamp((s.elevation + 0.12) / 0.2, 0, 1);
-    const moonVis = THREE.MathUtils.clamp((-s.elevation + 0.12) / 0.2, 0, 1);
+    const sunVis = Math.max(world.space, THREE.MathUtils.clamp((s.elevation + 0.12) / 0.2, 0, 1));
+    const moonVis = Math.max(world.space, THREE.MathUtils.clamp((-s.elevation + 0.12) / 0.2, 0, 1));
     const sc = new THREE.Color(...s.sunColor);
     (this.sunCore.material as THREE.SpriteMaterial).color.copy(sc);
     (this.sunCore.material as THREE.SpriteMaterial).opacity = sunVis;
     (this.sunGlow.material as THREE.SpriteMaterial).color.copy(sc);
-    (this.sunGlow.material as THREE.SpriteMaterial).opacity = 0.5 * sunVis;
+    (this.sunGlow.material as THREE.SpriteMaterial).opacity = 0.5 * sunVis * (0.4 + 0.6 * air);
     (this.moon.material as THREE.SpriteMaterial).opacity = moonVis;
-    (this.moonGlow.material as THREE.SpriteMaterial).opacity = 0.35 * moonVis;
-    (this.stars.material as THREE.PointsMaterial).opacity = s.stars;
+    (this.moonGlow.material as THREE.SpriteMaterial).opacity = 0.35 * moonVis * air;
+    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(s.stars, world.space);
 
-    // 조명: 해가 지면 달빛이 이어받는다
-    this.sunLight.position.set(dx, dy, dz).multiplyScalar(80);
-    this.sunLight.color.setRGB(...s.sunColor);
-    this.sunLight.intensity = s.sunIntensity;
-    this.moonLight.position.set(-dx, -dy, -dz).multiplyScalar(80);
-    this.moonLight.intensity = s.moonIntensity;
+    // 조명은 행성 전체에 같은 방향으로 비춘다 (낮과 밤이 경도에 따라 갈린다)
+    const sun = world.sun;
+    this.sunLight.position.copy(sun).multiplyScalar(10000);
+    this.sunLight.color.setRGB(...s.sunColor).lerp(WHITE, world.space);
+    this.sunLight.intensity = THREE.MathUtils.lerp(s.sunIntensity, 1.6, world.space);
+    this.moonLight.position.copy(sun).multiplyScalar(-10000);
+    this.moonLight.intensity = s.moonIntensity * air;
+    this.hemi.position.copy(world.up);
     this.hemi.color.setRGB(...s.hemiSky);
     this.hemi.groundColor.setRGB(...s.hemiGround);
-    this.hemi.intensity = s.hemiIntensity;
+    this.hemi.intensity = s.hemiIntensity * (1 - 0.8 * world.space);
   }
 }

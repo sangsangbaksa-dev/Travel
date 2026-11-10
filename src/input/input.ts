@@ -13,6 +13,7 @@ export class Input {
   private jumpQueued = false;
   private jumpTouch = false;
   private diveTouch = false;
+  private runTouch = false;
   private stick = { x: 0, y: 0 };
   private look = { yaw: 0, pitch: 0 };
   private active = false;
@@ -88,7 +89,18 @@ export class Input {
     const dive = document.createElement('button');
     dive.className = 'divebtn';
     dive.textContent = '잠수';
-    root.append(base, jump, dive);
+    const run = document.createElement('button');
+    run.className = 'runbtn';
+    run.textContent = '달리기';
+    run.setAttribute('aria-pressed', 'false');
+    root.append(base, jump, dive, run);
+    // 달리기 버튼은 누를 때마다 켜고 끈다 (스틱과 함께 쓰기 편하도록)
+    run.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.runTouch = !this.runTouch;
+      run.classList.toggle('on', this.runTouch);
+      run.setAttribute('aria-pressed', String(this.runTouch));
+    });
 
     const R = 55;
     let stickId = -1;
@@ -166,7 +178,12 @@ export class Input {
   }
 
   get diveHeld(): boolean {
-    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.diveTouch;
+    return this.keys.has('KeyC') || this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.diveTouch;
+  }
+
+  /** 달리기: Shift를 누르고 있는 동안 (터치는 버튼으로 켜고 끔) */
+  get runHeld(): boolean {
+    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.runTouch;
   }
 
   read(): InputFrame {

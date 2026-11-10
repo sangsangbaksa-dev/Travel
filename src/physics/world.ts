@@ -1,4 +1,4 @@
-import { surfaceNormal, waterHeightAt, type Terrain } from '../terrain/height';
+import { surfaceNormal, waterHeightAt, type Terrain } from './terrain';
 import { FIXED_DT } from './clock';
 
 // ---- 손맛 상수 (여기만 만지면 점프 느낌이 바뀐다) ----
@@ -21,6 +21,7 @@ export const SLIDE_ACCEL = 30;
 
 export const FLOAT_DEPTH = 0.25; // 물에서 큐브 밑면이 수면 아래로 잠기는 깊이
 export const WATER_SPEED = 0.7; // 물에서의 이동 속도 배수
+export const RUN_MULT = 1.9; // 달리기 속도 배수
 
 /** 나무/바위 같은 정적 충돌체 (원기둥). top이 Infinity면 올라설 수 없다. */
 export interface Obstacle {
@@ -32,6 +33,21 @@ export interface Obstacle {
   collisionTop?: number;
   /** 마법진: 밟으면 점프 속도의 몇 배로 쏘아 올린다 */
   launch?: number;
+  /** 있으면 원기둥 대신 회전된 상자: 반 너비 hx, hz와 상자 x축 방향 (c, s) */
+  box?: { hx: number; hz: number; c: number; s: number };
+}
+
+/** 장애물 중심에서 본 점의 상자 좌표 */
+function boxLocal(o: Obstacle, x: number, z: number): { bx: number; bz: number } {
+  const dx = x - o.x, dz = z - o.z, b = o.box!;
+  return { bx: dx * b.c + dz * b.s, bz: -dx * b.s + dz * b.c };
+}
+
+/** 점이 장애물 안(여유 m 포함)에 있는가 */
+function inside(o: Obstacle, x: number, z: number, m: number): boolean {
+  if (!o.box) return Math.hypot(x - o.x, z - o.z) < o.r + m;
+  const { bx, bz } = boxLocal(o, x, z);
+  return Math.abs(bx) < o.box.hx + m && Math.abs(bz) < o.box.hz + m;
 }
 export interface ObstacleSource {
   near(x: number, z: number): readonly Obstacle[];
@@ -47,6 +63,8 @@ export interface PhysicsInput {
   jumpHeld: boolean;
   /** 수영 중 잠수 버튼을 누르고 있는가 */
   diveHeld?: boolean;
+  /** 달리는 중인가 */
+  run?: boolean;
 }
 
 export interface PhysicsState {
@@ -116,7 +134,7 @@ export class PhysicsWorld {
     if (this.obstacles && !underWater) {
       for (const o of this.obstacles.near(x, z)) {
         if (o.top === Infinity || o.top <= g) continue;
-        if (Math.hypot(x - o.x, z - o.z) < o.r + HALF * 0.6) {
+        if (inside(o, x, z, HALF * 0.6)) {
           g = o.top;
           this.sampledRaised = true;
         }
@@ -139,7 +157,7 @@ export class PhysicsWorld {
     const inLen = Math.hypot(input.moveX, input.moveZ);
     const hasInput = inLen > 0.001;
     const scale = hasInput ? Math.min(1, inLen) / inLen : 0;
-    const speed = MAX_SPEED * (s.inWater && (s.grounded || s.submerged) ? WATER_SPEED : 1);
+    const speed = MAX_SPEED * (s.inWater && (s.grounded || s.submerged) ? WATER_SPEED : 1) * (input.run ? RUN_MULT : 1);
     const tvx = input.moveX * scale * speed;
     const tvz = input.moveZ * scale * speed;
     const accel = s.grounded ? (hasInput ? GROUND_ACCEL : GROUND_FRICTION) : AIR_ACCEL;
@@ -216,6 +234,20 @@ export class PhysicsWorld {
       const feetPrev = s.py - HALF;
       for (const o of this.obstacles.near(s.x, s.z)) {
         if (feetPrev >= (o.collisionTop ?? o.top) - 0.1 || s.y + HALF <= (o.collisionBottom ?? -Infinity)) continue;
+        if (o.box) {
+          const m = HALF * 0.9, b = o.box;
+          const { bx, bz } = boxLocal(o, s.x, s.z);
+          const px = b.hx + m - Math.abs(bx), pz = b.hz + m - Math.abs(bz);
+          if (px <= 0 || pz <= 0) continue;
+          // 덜 파고든 쪽으로 밀어낸다
+          let nx: number, nz: number, push: number;
+          if (px < pz) { push = px; nx = Math.sign(bx) * b.c; nz = Math.sign(bx) * b.s; }
+          else { push = pz; nx = -Math.sign(bz) * b.s; nz = Math.sign(bz) * b.c; }
+          s.x += nx * push; s.z += nz * push;
+          const vn = s.vx * nx + s.vz * nz;
+          if (vn < 0) { s.vx -= vn * nx; s.vz -= vn * nz; }
+          continue;
+        }
         let dx = s.x - o.x;
         let dz = s.z - o.z;
         let d = Math.hypot(dx, dz);

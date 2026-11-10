@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sampleSky, type RGB } from './cycle';
+import { sampleSky, sampleSkyForSun, type RGB } from './cycle';
 
 const lum = (c: RGB) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
@@ -62,5 +62,13 @@ describe('낮과 밤 순환', () => {
         for (const v of c) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
       }
     }
+  });
+
+  it('실제 해 높이에서 고른 하늘이 같은 높이의 시각과 일치한다', () => {
+    for (const e of [-0.9, -0.2, 0, 0.3, 0.95]) {
+      expect(sampleSkyForSun(e, true).elevation).toBeCloseTo(e, 5);
+      expect(sampleSkyForSun(e, false).elevation).toBeCloseTo(e, 5);
+    }
+    expect(sampleSkyForSun(0.05, false).horizon[0]).toBeGreaterThan(sampleSkyForSun(0.05, false).horizon[2]);
   });
 });

@@ -3,7 +3,12 @@ import { FIXED_DT, FixedStepper } from './clock';
 import {
   COYOTE_TIME, HALF, JUMP_HEIGHT, JUMP_BUFFER, PhysicsWorld, type PhysicsInput,
 } from './world';
-import { createTerrain, type Terrain } from '../terrain/height';
+import type { Terrain } from './terrain';
+
+/** 부드럽게 굽이치는 언덕 지형 */
+const createTerrain = (seed: number): Terrain => ({
+  height: (x, z) => Math.sin(x * 0.11 + seed) * 2.2 + Math.cos(z * 0.07 - seed * 0.5) * 3.1 + Math.sin((x + z) * 0.31) * 0.4,
+});
 
 const flat: Terrain = { height: () => 0 };
 const idle: PhysicsInput = { moveX: 0, moveZ: 0, jumpPressed: false, jumpHeld: false };

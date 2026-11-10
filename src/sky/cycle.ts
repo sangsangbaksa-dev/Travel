@@ -38,17 +38,17 @@ const k = (t: number, top: string, horizon: string, hs: string, hg: string, hi: 
   t, top: hex(top), horizon: hex(horizon), hemiSky: hex(hs), hemiGround: hex(hg), hemiIntensity: hi, stars,
 });
 
-// 파스텔 톤 키프레임. 마지막은 첫 번째와 같아서 매끄럽게 이어진다.
+// 실제 하늘에 가까운 키프레임. 마지막은 첫 번째와 같아서 매끄럽게 이어진다.
 const KEYS: Key[] = [
-  k(0.0, '#0d1033', '#2a2d5a', '#6272c4', '#242a58', 0.6, 1),
-  k(0.2, '#1c2050', '#413f73', '#6c7ac2', '#2c3260', 0.65, 0.9),
-  k(0.27, '#7fa6e6', '#ffc7a6', '#ffe0cf', '#b0b894', 1.3, 0.05),
-  k(0.36, '#7fc3ff', '#d4ecff', '#fff6ec', '#a8c8a0', 1.65, 0),
-  k(0.5, '#6ab8ff', '#dff1ff', '#fff6ec', '#a8c8a0', 1.75, 0),
-  k(0.64, '#78bfff', '#d9ecff', '#fff4e6', '#a8c8a0', 1.65, 0),
-  k(0.73, '#8084d8', '#ffb59a', '#ffd8c4', '#b4a894', 1.3, 0.05),
-  k(0.8, '#2b2b68', '#5c4c7c', '#7c80c4', '#3a3a68', 0.75, 0.7),
-  k(1.0, '#0d1033', '#2a2d5a', '#6272c4', '#242a58', 0.6, 1),
+  k(0.0, '#04070f', '#0d1424', '#3a4a78', '#141a2a', 0.35, 1),
+  k(0.2, '#060b18', '#1a2238', '#45557f', '#1c2234', 0.4, 0.9),
+  k(0.27, '#4a6fa5', '#f0a374', '#ffd7b8', '#7a7a66', 1.1, 0.05),
+  k(0.36, '#3f7fd0', '#a9cbe8', '#fff4e6', '#8a9a7a', 1.4, 0),
+  k(0.5, '#2f74d0', '#b4d2ee', '#fffaf0', '#8a9a7a', 1.5, 0),
+  k(0.64, '#3a7bcf', '#adcdea', '#fff4e6', '#8a9a7a', 1.4, 0),
+  k(0.73, '#56609e', '#f29a6b', '#ffcfb0', '#7a7060', 1.1, 0.05),
+  k(0.8, '#0d1230', '#2a2440', '#4a5584', '#1c2030', 0.45, 0.7),
+  k(1.0, '#04070f', '#0d1424', '#3a4a78', '#141a2a', 0.35, 1),
 ];
 
 const WARM = hex('#ffb27a');
@@ -87,4 +87,13 @@ export function sampleSky(timeOfDay: number): SkyState {
     hemiIntensity: lerp(a.hemiIntensity, b.hemiIntensity, u),
     stars: lerp(a.stars, b.stars, u),
   };
+}
+
+/**
+ * 실제 해 높이(-1~1)로 하늘을 고른다. morning이면 해가 떠오르는 중, 아니면 지는 중.
+ * sunDir은 호출한 쪽이 실제 방향으로 바꿔 쓴다.
+ */
+export function sampleSkyForSun(elevation: number, morning: boolean): SkyState {
+  const a = Math.asin(Math.max(-1, Math.min(1, elevation))) / (Math.PI * 2);
+  return sampleSky(morning ? 0.25 + a : 0.75 - a);
 }

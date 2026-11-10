@@ -5,68 +5,61 @@ import { Particles } from './fx/particles';
 import { hud } from './hud';
 import { Input } from './input/input';
 import { FixedStepper } from './physics/clock';
-import { HALF, PhysicsWorld, type PhysicsInput } from './physics/world';
+import { HALF, type PhysicsInput } from './physics/world';
+import { surfaceNormal } from './physics/terrain';
 import { Clouds } from './sky/clouds';
-import { sampleSky } from './sky/cycle';
+import { sampleSkyForSun } from './sky/cycle';
 import { Sky } from './sky/sky';
-import { BIOME_NAMES, BIOMES, dominantBiome } from './terrain/biome';
-import { createTerrain, surfaceNormal, terrainInfo, waterHeightAt } from './terrain/height';
-import { ChunkManager } from './world/chunks';
-import { CreatureField } from './world/creatures';
-import { FishSchools } from './world/fish';
-import { DeepSea } from './world/deepSea';
-import { Residents } from './world/residents';
-import { CAVE, caveCeilingAt, caveObstacles, createPassageTerrain, isCave, passageZone, Passages, type Realm } from './world/passages';
-import { createVolcanicTerrain, Volcano, VOLCANO } from './world/volcano';
-import { alpineDistance, createAlpineTerrain, makeAlpineLake } from './world/alpineLake';
-import { RealmCreatures } from './world/realmCreatures';
+import { Atmosphere } from './earth/atmosphere';
+import { Frame, LocalTerrain, SphereBody } from './earth/body';
+import { loadCountries } from './earth/countries';
+import { dirFromLatLon, eastNorth, latLonFromDir, METERS_PER_HEIGHT, RADIUS } from './earth/geo';
+import { Landmarks } from './earth/landmarks';
+import { Ocean } from './earth/ocean';
+import { EARTH_IMAGE_URL, loadPlanet } from './earth/planet';
+import { seaName } from './earth/places';
+import { dayOfYear, sunDirection } from './earth/sun';
+import { PlanetTerrain } from './earth/terrain';
+import { Vegetation } from './earth/vegetation';
 import { Minimap } from './world/minimap';
-import { Settlements } from './world/settlements';
-import { settlementNameAt } from './world/settlement-layout';
-import { ObjectCache } from './world/scatter';
-import { Water } from './world/water';
 
 // ---------- 장면 ----------
 const app = document.getElementById('app')!;
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
 let pixelRatio = Math.min(devicePixelRatio, 2);
 renderer.setPixelRatio(pixelRatio);
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog('#dff1ff', 30, 92);
-const sky = new Sky(scene);
+scene.fog = new THREE.Fog('#b4d2ee', 150, 2200);
+/** 플레이어 발밑 해수면을 원점으로 하는 지역 좌표계. 카메라, 큐브, 하늘이 여기 들어간다 */
+const local = new THREE.Group();
+local.matrixAutoUpdate = false;
+scene.add(local);
+
+hud.setLoading('지구를 불러오는 중…');
+const [planet, countries] = await Promise.all([loadPlanet(), loadCountries()]);
+const landmarks = new Landmarks(planet);
+scene.add(landmarks.group);
+
+const terrain = new PlanetTerrain(planet);
+scene.add(terrain.group);
+const ocean = new Ocean();
+local.add(ocean.near);
+scene.add(ocean.far);
+const atmosphere = new Atmosphere();
+scene.add(atmosphere.mesh);
+const sky = new Sky(scene, local);
 const clouds = new Clouds();
-scene.add(clouds.mesh);
+local.add(clouds.mesh);
+const vegetation = new Vegetation(planet, landmarks);
+scene.add(vegetation.group);
 
-const terrain = createPassageTerrain(createAlpineTerrain(createVolcanicTerrain(createTerrain(1337))));
-const waterLevel = terrain.waterLevel ?? -Infinity;
-const objects = new ObjectCache(terrain);
-const chunks = new ChunkManager(terrain, objects);
-chunks.prime(0, 0, 2);
-scene.add(chunks.group);
-const water = new Water(waterLevel);
-const lake = makeAlpineLake();
-scene.add(water.mesh, lake.mesh);
-
-const realms: { terrain: typeof terrain; mode: Realm } = { terrain, mode: 'surface' };
-scene.add(new Passages(terrain).group);
-const volcano = new Volcano();
-scene.add(volcano.group);
-const realmCreatures = new RealmCreatures(realms.terrain);
-const creatures = new CreatureField(terrain);
-const fish = new FishSchools(terrain);
-const deepSea = new DeepSea(terrain);
-const residents = new Residents(terrain);
-const settlements = new Settlements(terrain);
-scene.add(creatures.group, residents.group, settlements.group, realmCreatures.group);
-scene.add(fish.mesh, deepSea.group);
-const physics = new PhysicsWorld(realms.terrain, 0, 0, {
-  near: (x, z) => realms.mode === 'surface' ? objects.near(x, z) : caveObstacles(x, z),
-});
+const body = new SphereBody(planet, landmarks.spawn);
+body.addObstacles(landmarks);
+body.addObstacles(vegetation);
 const cube = new Cube();
-scene.add(cube.group, cube.shadow);
-
+local.add(cube.group, cube.shadow);
 const particles = new Particles();
 scene.add(particles.mesh);
 
@@ -74,24 +67,30 @@ const audio = new GameAudio();
 hud.setMuted(audio.muted);
 hud.onMute(() => hud.setMuted(audio.toggleMuted()));
 
-// ---------- 낮밤 ----------
-const DAY_SECONDS = 240;
-const FAST = 20;
-let timeOfDay = 0.3;
-let fast = false;
-hud.onFast(() => {
-  fast = !fast;
-  hud.setFast(fast);
-});
+// ---------- 시간: 실제 날짜의 계절, 뉴욕 오전 10시에서 시작. 하루는 10분 ----------
+const DAY_SECONDS = 600;
+const today = dayOfYear(new Date());
+let utcHours = 15;
 
 // ---------- 카메라/입력 ----------
 const input = new Input(renderer.domElement, app);
-const minimap = new Minimap(app, deepSea.site);
-const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
+const minimap = new Minimap(app, EARTH_IMAGE_URL, landmarks.marks);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.08, 60000);
+local.add(camera);
 let camYaw = 0.6;
 let camPitch = 0.26;
-const CAM_DIST = 7.5;
-const camTarget = new THREE.Vector3();
+let camDist = 7.5;
+let firstPerson = false;
+const MIN_DIST = 4, MAX_DIST = 26000;
+hud.onView(() => { firstPerson = !firstPerson; hud.setView(firstPerson); });
+renderer.domElement.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  camDist = THREE.MathUtils.clamp(camDist * Math.exp(e.deltaY * 0.0012), MIN_DIST, MAX_DIST);
+}, { passive: false });
+const zoomKeys = new Set<string>();
+addEventListener('keydown', (e) => { if (e.code === 'Minus' || e.code === 'Equal') zoomKeys.add(e.code); });
+addEventListener('keyup', (e) => zoomKeys.delete(e.code));
+hud.onZoom((dir) => { camDist = THREE.MathUtils.clamp(camDist * (dir > 0 ? 3 : 1 / 3), MIN_DIST, MAX_DIST); });
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight);
@@ -101,6 +100,46 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+// ---------- 상태 ----------
+const stepper = new FixedStepper();
+const view = new Frame();
+const viewTerrain = new LocalTerrain(planet, view);
+const interp = new THREE.Vector3();
+const normal = new THREE.Vector3();
+const nTmp = { x: 0, y: 1, z: 0 };
+const camWorld = new THREE.Vector3();
+const targetWorld = new THREE.Vector3();
+const sunWorld = new THREE.Vector3();
+const sunLocal = new THREE.Vector3();
+const east = new THREE.Vector3(), north = new THREE.Vector3();
+const lastPos = new THREE.Vector3();
+const feet = new THREE.Vector3();
+const tmp = new THREE.Vector3();
+const horizonColor = new THREE.Color();
+const DEEP = new THREE.Color('#06202c');
+const SHALLOW = new THREE.Color('#2d7f8c');
+let faceX = 0, faceZ = 1;
+let odoX = 0, odoZ = 0;
+let camAlt = 0;
+let last = performance.now();
+let stepDist = 0;
+let placeT = 0;
+let placeName = '';
+let fpsCount = 0;
+let emaDt = 1 / 60;
+let prTimer = -5;
+const DUST = '#d8cdb0';
+const SPLASH = '#dff6ff';
+
+view.z.copy(body.frame.z);
+view.moveTo(body.pos);
+camAlt = body.pos.length() - RADIUS;
+local.matrix.copy(view.matrix);
+local.updateMatrixWorld(true);
+camera.position.set(0, camAlt + 4, 8);
+terrain.prime(view.toWorld(0, camAlt + 4, 8, tmp));
+hud.setLoading(null);
+
 // ---------- 시작 ----------
 let started = false;
 hud.onStart(() => {
@@ -109,46 +148,23 @@ hud.onStart(() => {
   document.body.classList.add('game-started');
   audio.unlock();
   window.focus();
-  hud.showHint(
-    hud.isTouch ? '왼쪽 스틱으로 이동하고 오른쪽 버튼으로 점프해요' : '마우스로 둘러보고, Esc로 커서를 꺼내요. 다시 클릭하면 돌아와요',
-  );
+  hud.showHint(hud.isTouch
+    ? '왼쪽 스틱으로 이동, 두 손가락 버튼으로 우주까지 멀어질 수 있어요'
+    : '마우스 휠로 우주까지 멀어지고, T로 1인칭/3인칭을 바꿔요');
 });
-for (const ev of ['pointerdown', 'keydown'] as const) {
-  addEventListener(ev, () => { if (started) audio.unlock(); });
-}
+for (const ev of ['pointerdown', 'keydown'] as const) addEventListener(ev, () => { if (started) audio.unlock(); });
 
-// ---------- 상태 ----------
-const stepper = new FixedStepper();
-const pos = new THREE.Vector3();
-const normal = new THREE.Vector3();
-const nTmp = { x: 0, y: 1, z: 0 };
-let faceX = 0;
-let faceZ = 1;
-let last = performance.now();
-let stepDist = 0;
-let placeT = 0;
-let placeName = '';
-let fireflyT = 0;
-let fpsCount = 0;
-let emaDt = 1 / 60;
-let prTimer = -5; // 시작 직후의 셰이더 컴파일 끊김은 무시한다
-
-const DUST = '#f1e8cc';
-const SPLASH = '#dff6ff';
-const DEEP_WATER_COLOR = new THREE.Color('#244858');
-
-/** 지금 서 있는 곳의 이름 */
-function placeAt(x: number, z: number, y: number, inWater: boolean): string {
-  if (realms.mode === 'cave') return '지하 동굴';
-  if (realms.mode === 'sky') return '구름 위 전망대';
-  if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < 105 && !inWater) return '화산';
-  if (alpineDistance(x, z) < 1.55) return '빙하호';
-  const settlement = settlementNameAt(x, z);
-  if (settlement) return settlement;
-  if (inWater) return terrainInfo(x, z, 1337).landness < 0.6 ? '바다' : '강·호수';
-  if (y > 14) return '산악 지대';
-  const b = dominantBiome(terrain.climate!(x, z));
-  return BIOME_NAMES[BIOMES[b]];
+/** 지금 있는 곳의 이름 */
+function placeAt(dir: THREE.Vector3, h: number, inWater: boolean): string {
+  const ll = latLonFromDir(dir.x, dir.y, dir.z);
+  const mark = landmarks.nameAt(dir);
+  const country = countries.nameAt(ll.lat, ll.lon);
+  const where = mark ? (country && country !== mark ? `${country} · ${mark}` : mark)
+    : country ?? (inWater || h < 0 ? seaName(ll.lat, ll.lon) : '');
+  const m = Math.round(h * METERS_PER_HEIGHT);
+  const alt = h < -0.3 ? `수심 ${(-m).toLocaleString('ko-KR')}m` : `해발 ${Math.max(0, m).toLocaleString('ko-KR')}m`;
+  const ns = ll.lat >= 0 ? 'N' : 'S', ew = ll.lon >= 0 ? 'E' : 'W';
+  return `${where || '지구'} · ${alt} · ${Math.abs(ll.lat).toFixed(1)}°${ns} ${Math.abs(ll.lon).toFixed(1)}°${ew}`;
 }
 
 function frame(now: number) {
@@ -157,7 +173,6 @@ function frame(now: number) {
   last = now;
   const time = now / 1000;
 
-  // 느린 기기에서는 해상도를 낮춰 부드러움을 지킨다
   emaDt += (dt - emaDt) * 0.05;
   prTimer += dt;
   if (prTimer > 3) {
@@ -173,12 +188,16 @@ function frame(now: number) {
   if (!started) {
     input.consumeJump();
     inp.moveX = inp.moveY = inp.lookYaw = inp.lookPitch = 0;
-    camYaw += dt * 0.12; // 시작 화면 뒤에서 천천히 도는 카메라
+    camYaw += dt * 0.12;
   }
   camYaw -= inp.lookYaw;
-  camPitch = THREE.MathUtils.clamp(camPitch + inp.lookPitch, 0.12, 1.25);
+  if (zoomKeys.has('Minus')) camDist = Math.min(MAX_DIST, camDist * Math.exp(dt * 2.2));
+  if (zoomKeys.has('Equal')) camDist = Math.max(MIN_DIST, camDist * Math.exp(-dt * 2.2));
+  const space = THREE.MathUtils.smoothstep(camDist, 60, 2400);
+  if (firstPerson) camPitch = THREE.MathUtils.clamp(camPitch + inp.lookPitch, -1.35, 1.35);
+  else camPitch = THREE.MathUtils.clamp(camPitch + inp.lookPitch, 0.05, THREE.MathUtils.lerp(1.25, 1.52, space));
 
-  // 카메라 기준 입력 → 월드 방향
+  // 카메라 기준 입력 → 지역 좌표계 방향
   const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw);
   const rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
   const moveX = fx * inp.moveY + rx * inp.moveX;
@@ -189,37 +208,46 @@ function frame(now: number) {
   let jumped = false;
   let landImpact = 0;
   let pressed = steps > 0 && input.consumeJump();
+  lastPos.copy(body.pos);
   for (let i = 0; i < steps; i++) {
-    const pi: PhysicsInput = { moveX, moveZ, jumpPressed: pressed, jumpHeld: started && input.jumpHeld, diveHeld: started && input.diveHeld };
-    physics.step(pi);
+    const pi: PhysicsInput = { moveX, moveZ, jumpPressed: pressed, jumpHeld: started && input.jumpHeld, diveHeld: started && input.diveHeld, run: started && input.runHeld };
+    body.step(pi);
     pressed = false;
-    jumped ||= physics.state.jumped;
-    landImpact = Math.max(landImpact, physics.state.landImpact);
+    jumped ||= body.physics.state.jumped;
+    landImpact = Math.max(landImpact, body.physics.state.landImpact);
   }
-  const s = physics.state;
-  realms.mode = passageZone(s.x, s.z);
-  creatures.group.visible = residents.group.visible = realms.mode === 'surface';
-  minimap.update(s.x, s.z, faceX, faceZ, dt, started && realms.mode === 'surface');
-  fish.update(s.x, s.z, time, dt, started && realms.mode === 'surface' && s.submerged);
-  deepSea.update(s.x, s.z, started && realms.mode === 'surface' && s.submerged);
+  const s = body.physics.state;
+  tmp.subVectors(body.pos, lastPos);
+  odoX += tmp.dot(body.frame.x);
+  odoZ += tmp.dot(body.frame.z);
   const speed = Math.hypot(s.vx, s.vz);
-  const localWater = waterHeightAt(terrain, s.x, s.z);
+
+  // ---- 렌더 좌표계: 보간 위치의 접평면 ----
+  body.lerp(alpha, interp);
+  view.z.copy(body.frame.z);
+  view.moveTo(interp);
+  local.matrix.copy(view.matrix);
+  local.updateMatrixWorld(true);
+  const y = interp.length() - RADIUS;
+  const localWater = viewTerrain.waterAt(0, 0);
+  const groundY = s.inWater && !s.submerged ? localWater - 0.01 : s.groundY;
   const feetY = s.inWater && !s.submerged ? localWater + 0.05 : s.groundY + 0.1;
+  view.toWorld(0, feetY, 0, feet);
 
   // ---- 연출: 점프/착지/발걸음 ----
   if (jumped) {
     cube.kickJump();
     audio.jump();
-    particles.emit(s.x, feetY, s.z, s.inWater ? 8 : 5, { color: s.inWater ? SPLASH : DUST, speed: 1.6, up: 2, size: 0.1 });
+    particles.emit(feet, view.up, s.inWater ? 8 : 5, { color: s.inWater ? SPLASH : DUST, speed: 1.6, up: 2, size: 0.1 });
   }
   if (landImpact > 2) {
     cube.kickLand(landImpact);
     if (s.inWater) {
       audio.splash();
-      particles.emit(s.x, feetY, s.z, 16, { color: SPLASH, speed: 2.6, up: 5, size: 0.12, life: 0.7 });
+      particles.emit(feet, view.up, 16, { color: SPLASH, speed: 2.6, up: 5, size: 0.12, life: 0.7 });
     } else {
       audio.land(landImpact);
-      particles.emit(s.x, feetY, s.z, Math.min(12, 4 + Math.round(landImpact * 0.4)), { color: DUST, speed: 2.4, up: 1.6, size: 0.12 });
+      particles.emit(feet, view.up, Math.min(12, 4 + Math.round(landImpact * 0.4)), { color: DUST, speed: 2.4, up: 1.6, size: 0.12 });
     }
   }
   if (started && s.grounded && speed > 2) {
@@ -227,135 +255,117 @@ function frame(now: number) {
     if (stepDist > 1.6) {
       stepDist = 0;
       audio.step();
-      particles.emit(s.x - (s.vx / speed) * 0.4, feetY, s.z - (s.vz / speed) * 0.4, 2, {
-        color: s.inWater ? SPLASH : DUST, speed: 0.8, up: 1.4, size: 0.08, life: 0.4,
-      });
+      particles.emit(feet, view.up, 2, { color: s.inWater ? SPLASH : DUST, speed: 0.8, up: 1.4, size: 0.08, life: 0.4 });
     }
   }
 
   placeT -= dt;
   if (placeT <= 0) {
     placeT = 0.5;
-    const name = placeAt(s.x, s.z, s.y, s.inWater);
-    if (name !== placeName) {
-      placeName = name;
-      hud.setPlace(name);
-    }
+    const name = placeAt(view.up, s.inWater ? viewTerrain.height(0, 0) : s.groundY, s.inWater);
+    if (name !== placeName) { placeName = name; hud.setPlace(name); }
   }
-  // ---- 렌더 보간 ----
-  pos.set(
-    s.px + (s.x - s.px) * alpha,
-    s.py + (s.y - s.py) * alpha,
-    s.pz + (s.z - s.pz) * alpha,
-  );
 
-  // 그림자/기울기: 물 위나 바위 위에서는 수평으로, 그 외에는 지형 법선을 따른다
-  const terrH = realms.terrain.height(pos.x, pos.z);
-  const groundY = s.inWater && !s.submerged ? localWater - 0.01 : s.groundY;
+  // 그림자/기울기
+  const terrH = viewTerrain.height(0, 0);
   if (s.inWater || s.groundY > terrH + 0.05) normal.set(0, 1, 0);
   else {
-    surfaceNormal(realms.terrain, pos.x, pos.z, nTmp);
+    surfaceNormal(viewTerrain, 0, 0, nTmp);
     normal.set(nTmp.x, nTmp.y, nTmp.z);
   }
-  if (s.inWater && !s.submerged) pos.y += Math.sin(now / 380) * 0.04; // 물 위에서 살짝 출렁
-
-  timeOfDay = (timeOfDay + (dt / DAY_SECONDS) * (fast ? FAST : 1)) % 1;
-  chunks.update(pos.x, pos.z);
-  volcano.update(time);
-  if (realms.mode === 'surface') {
-    creatures.update(pos.x, pos.z, time);
-    residents.update(time);
-    settlements.update(pos.x, pos.z);
-  }
-  realmCreatures.update(realms.mode, pos.x, pos.z, time);
-  cube.update(dt, pos, s.vy, s.grounded, groundY, faceX, faceZ, normal);
+  const cubePos = tmp.set(0, y, 0);
+  if (s.inWater && !s.submerged) cubePos.y += Math.sin(now / 380) * 0.04;
+  cube.update(dt, cubePos, s.vy, s.grounded, groundY, faceX, faceZ, normal);
+  cube.group.visible = !firstPerson;
+  cube.shadow.visible = !firstPerson && camDist < 200;
   particles.update(dt);
 
-  // ---- 추적 카메라: 높이는 천천히, 수평은 빠르게 ----
-  const k = 1 - Math.exp(-dt * 10);
-  const ky = 1 - Math.exp(-dt * 4);
-  camTarget.x += (pos.x - camTarget.x) * k;
-  camTarget.z += (pos.z - camTarget.z) * k;
-  camTarget.y += (pos.y - camTarget.y) * ky;
-  const cp = Math.cos(camPitch);
-  const cameraDistance = s.submerged ? 3.2 : CAM_DIST;
-  camera.position.set(
-    camTarget.x + Math.sin(camYaw) * cp * cameraDistance,
-    camTarget.y + (s.submerged ? 0.35 : 1.2) + Math.sin(camPitch) * (s.submerged ? 0.5 : CAM_DIST),
-    camTarget.z + Math.cos(camYaw) * cp * cameraDistance,
-  );
-  if (realms.mode === 'cave') {
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, CAVE.x - 3.15, CAVE.x + 3.15);
-    camera.position.z = Math.max(camera.position.z, CAVE.endWall + 4);
-  }
-  let cameraWater = waterHeightAt(terrain, camera.position.x, camera.position.z);
-  if (s.submerged && (cameraWater !== localWater || terrain.height(camera.position.x, camera.position.z) + .5 >= cameraWater)) {
-    camera.position.x = pos.x;
-    camera.position.z = pos.z;
-    cameraWater = waterHeightAt(terrain, pos.x, pos.z);
-  }
-  const cameraFloor = terrain.height(camera.position.x, camera.position.z);
-  const minY = s.submerged ? cameraFloor + 0.25 : Math.max(cameraFloor, cameraWater) + 1;
-  if (camera.position.y < minY) camera.position.y = minY;
-  if (realms.mode === 'cave' && isCave(camera.position.x, camera.position.z)) {
-    const ceiling = caveCeilingAt(terrain, camera.position.x, camera.position.z);
-    camera.position.y = Math.min(camera.position.y, Math.max(minY, ceiling - .45));
-  }
-  if (s.submerged && minY < cameraWater - 0.1) camera.position.y = Math.min(camera.position.y, cameraWater - 0.1);
-  camera.lookAt(camTarget.x, camTarget.y + (s.submerged ? 0.2 : 1.1), camTarget.z);
-
-  const skyState = sampleSky(timeOfDay);
-  const night = THREE.MathUtils.clamp((0.1 - skyState.elevation) / 0.3, 0, 1);
-  chunks.animate(time);
-
-  // 밤의 반딧불: 마법 지대에서는 더 많고 색이 다르다
-  if (started && night > 0.3 && realms.mode === 'surface') {
-    fireflyT -= dt;
-    if (fireflyT <= 0) {
-      fireflyT = 0.35;
-      const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 9;
-      const fx2 = s.x + Math.cos(a) * r, fz2 = s.z + Math.sin(a) * r;
-      const fy = Math.max(terrain.height(fx2, fz2), waterHeightAt(terrain, fx2, fz2)) + 0.6 + Math.random() * 2.2;
-      particles.emit(fx2, fy, fz2, 1, { color: '#fff6a8', speed: 0.5, up: 0.4, size: 0.09, life: 4, gravity: 0 });
+  // ---- 카메라 ----
+  const ky = 1 - Math.exp(-dt * 6);
+  camAlt += (y - camAlt) * ky;
+  if (firstPerson) {
+    const eye = y + 0.22;
+    camera.position.set(0, eye, 0);
+    const cp = Math.cos(camPitch);
+    targetWorld.copy(view.toWorld(fx * cp, eye - Math.sin(camPitch), fz * cp, targetWorld));
+  } else {
+    const cp = Math.cos(camPitch);
+    const dist = s.submerged ? Math.min(camDist, 3.2) : camDist;
+    const lift = THREE.MathUtils.lerp(s.submerged ? 0.35 : 1.2, 0, space);
+    camera.position.set(Math.sin(camYaw) * cp * dist, camAlt + lift + Math.sin(camPitch) * dist, Math.cos(camYaw) * cp * dist);
+    if (dist < 400) {
+      const cx = camera.position.x, cz = camera.position.z;
+      const floor = viewTerrain.height(cx, cz), water = viewTerrain.waterAt(cx, cz);
+      const minY = s.submerged ? floor + 0.25 : Math.max(floor, water) + 1;
+      if (camera.position.y < minY) camera.position.y = minY;
+      if (s.submerged) camera.position.y = Math.min(camera.position.y, water - 0.1);
     }
+    view.toWorld(0, camAlt + THREE.MathUtils.lerp(s.submerged ? 0.2 : 1.1, 0, space), 0, targetWorld);
   }
-  sky.update(camera, skyState, time);
-  const underwaterView = realms.mode === 'surface' && camera.position.y < cameraWater;
-  document.body.classList.toggle('underwater', underwaterView);
+  camera.up.copy(view.up);
+  camera.lookAt(targetWorld);
+  camera.updateMatrixWorld();
+  camera.getWorldPosition(camWorld);
+  const altitude = camWorld.length() - RADIUS;
+
+  // ---- 해와 하늘 ----
+  utcHours = (utcHours + (dt / DAY_SECONDS) * 24) % 24;
+  sunDirection(today, utcHours, sunWorld);
+  view.dirToLocal(sunWorld, sunLocal);
+  eastNorth(view.up, east, north);
+  const skyState = sampleSkyForSun(sunLocal.y, sunWorld.dot(east) > 0);
+  skyState.sunDir = [sunLocal.x, sunLocal.y, sunLocal.z];
+  const ll = latLonFromDir(view.up.x, view.up.y, view.up.z);
+  const night = THREE.MathUtils.clamp((0.05 - sunLocal.y) / 0.25, 0, 1);
+  const aurora = night * THREE.MathUtils.smoothstep(Math.abs(ll.lat), 56, 68);
+  sky.update(camera.position, skyState, time, { sun: sunWorld, up: view.up, space, aurora });
+  terrain.sunDir.value.copy(sunWorld);
+  horizonColor.setRGB(...skyState.horizon);
+
+  // 안개: 땅에서는 아지랑이, 높이 오를수록 걷히고, 물속에서는 짙은 청록색
   const fog = scene.fog as THREE.Fog;
-  const inCave = realms.mode === 'cave';
-  fog.near = underwaterView ? 5 : inCave ? 12 : 30;
-  fog.far = underwaterView ? 38 : inCave ? 68 : 92;
-  if (underwaterView) {
-    const depth = THREE.MathUtils.clamp((cameraWater - camera.position.y) / 20, 0, 1);
-    fog.color.set('#5ea6b1').lerp(DEEP_WATER_COLOR, depth);
-    fog.far = 38 - depth * 10;
+  const underwater = camWorld.length() < RADIUS - 0.02 && !s.inWater || (s.submerged && camWorld.length() < RADIUS);
+  document.body.classList.toggle('underwater', underwater);
+  if (underwater) {
+    const depth = THREE.MathUtils.clamp((RADIUS - camWorld.length()) / 40, 0, 1);
+    fog.color.copy(SHALLOW).lerp(DEEP, depth);
+    fog.near = 2;
+    fog.far = 42 - depth * 18;
+  } else {
+    fog.color.copy(horizonColor);
+    fog.near = 150 + altitude * 2;
+    fog.far = (2200 + altitude * 6) / Math.max(0.02, 1 - space);
   }
-  else if (inCave) fog.color.set('#55566a');
-  clouds.mesh.visible = !inCave;
-  clouds.update(camera, time, skyState);
-  const brightness = Math.min(1, skyState.sunIntensity / 1.25 + skyState.moonIntensity * 0.3);
-  water.update(camera.position.x, camera.position.z, time, brightness);
-  lake.update(camera.position.x, camera.position.z, time, brightness);
-  if (started) audio.update(dt, { elevation: skyState.elevation, speed, grounded: s.grounded });
+
+  terrain.update(camWorld);
+  landmarks.update(camWorld, time, night);
+  vegetation.update(body.pos);
+  ocean.update(time, sunWorld, camWorld, view.up, horizonColor);
+  atmosphere.update(sunWorld, camWorld, space);
+  clouds.update(time, skyState, odoX, odoZ, altitude);
+  const faceWorld = tmp.copy(view.x).multiplyScalar(faceX).addScaledVector(view.z, faceZ);
+  minimap.update(ll.lat, ll.lon, Math.atan2(faceWorld.dot(east), faceWorld.dot(north)), dt, started && camDist < 1500);
+  if (started) audio.update(dt, { elevation: sunLocal.y, speed, grounded: s.grounded });
 
   renderer.render(scene, camera);
   fpsCount++;
 }
 
-camTarget.set(physics.state.x, physics.state.y, physics.state.z);
 requestAnimationFrame(frame);
 
 // 검증/디버깅용 훅
 (window as unknown as Record<string, unknown>).__cube = {
-  state: () => ({ ...physics.state, half: HALF, frames: fpsCount, timeOfDay, pixelRatio, audio: audio.state }),
-  setTime: (t: number) => { timeOfDay = t; },
-  chunks: () => chunks.count,
-  teleport: (x: number, z: number, y?: number) => {
-    const st = physics.state;
-    st.x = st.px = x; st.z = st.pz = z;
-    st.y = st.py = y ?? Math.max(terrain.height(x, z), waterHeightAt(terrain, x, z)) + 4;
-    st.vx = st.vy = st.vz = 0;
-    camTarget.set(x, st.y, z);
+  state: () => {
+    const ll = latLonFromDir(body.pos.x, body.pos.y, body.pos.z);
+    return { ...body.physics.state, ...ll, half: HALF, frames: fpsCount, utcHours, pixelRatio, terrainMeshes: terrain.count, camDist };
   },
+  setTime: (h: number) => { utcHours = h; },
+  setZoom: (d: number) => { camDist = d; },
+  setView: (yaw: number, pitch: number) => { camYaw = yaw; camPitch = pitch; },
+  firstPerson: (v: boolean) => { firstPerson = v; hud.setView(v); },
+  teleport: (lat: number, lon: number, lift = 3) => {
+    body.teleport(dirFromLatLon(lat, lon), lift);
+    camAlt = body.pos.length() - RADIUS;
+  },
+  prime: () => terrain.prime(camWorld),
 };

@@ -6,7 +6,9 @@ const toastEl = $('toast');
 const hintEl = $('hint');
 const startEl = $('start');
 const muteBtn = $('muteBtn');
-const timeBtn = $('timeBtn');
+const viewBtn = $('viewBtn');
+const startBtn = $('startBtn') as HTMLButtonElement;
+const loadingEl = $('loading');
 
 const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 let toastTimer = 0;
@@ -37,31 +39,48 @@ export const hud = {
     muteBtn.classList.toggle('on', m);
   },
 
-  setFast(f: boolean) {
-    timeBtn.classList.toggle('on', f);
-  },
 
   onMute(cb: () => void) {
     muteBtn.addEventListener('click', cb);
     addEventListener('keydown', (e) => { if (e.code === 'KeyM' && !e.repeat) cb(); });
   },
 
-  onFast(cb: () => void) {
-    timeBtn.addEventListener('click', cb);
+
+  /** 1인칭/3인칭 전환 (T) */
+  onView(cb: () => void) {
+    viewBtn.addEventListener('click', cb);
     addEventListener('keydown', (e) => { if (e.code === 'KeyT' && !e.repeat) cb(); });
+  },
+
+  setView(firstPerson: boolean) {
+    viewBtn.textContent = firstPerson ? '1인칭 (T)' : '3인칭 (T)';
+    viewBtn.classList.toggle('on', firstPerson);
+  },
+
+  /** 줌 버튼: dir > 0이면 멀어진다 */
+  onZoom(cb: (dir: number) => void) {
+    $('zoomOut').addEventListener('click', () => cb(1));
+    $('zoomIn').addEventListener('click', () => cb(-1));
+  },
+
+  /** 불러오는 동안 시작 버튼을 막고 문구를 보인다. null이면 준비 완료 */
+  setLoading(msg: string | null) {
+    loadingEl.textContent = msg ?? '';
+    loadingEl.hidden = msg === null;
+    startBtn.disabled = msg !== null;
+    if (msg === null) startBtn.focus({ preventScroll: true });
   },
 
   /** 시작 화면: 버튼, Enter, Space 중 무엇으로든 시작한다 */
   onStart(cb: () => void) {
     let done = false;
     const go = () => {
-      if (done) return;
+      if (done || startBtn.disabled) return;
       done = true;
       startEl.classList.add('hidden');
       cb();
     };
-    $('startBtn').addEventListener('click', go);
+    startBtn.addEventListener('click', go);
     addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') go(); });
-    $('startBtn').focus({ preventScroll: true });
   },
 };
