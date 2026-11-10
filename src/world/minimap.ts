@@ -24,12 +24,15 @@ export class Minimap {
     this.image.src = imageUrl;
     root.appendChild(this.element);
     this.element.addEventListener('click', () => { this.world = !this.world; this.timer = 0; });
-    addEventListener('keydown', (e) => { if (e.code === 'KeyN' && !e.repeat) { this.world = !this.world; this.timer = 0; } });
+    addEventListener('keydown', (e) => { if (e.code === 'KeyN' && !e.repeat && !(e.target instanceof HTMLInputElement)) { this.world = !this.world; this.timer = 0; } });
   }
+
+  showWorld() { this.world = true; this.timer = 0; }
 
   /** heading: 북쪽 기준 시계 방향 라디안 */
   update(lat: number, lon: number, heading: number, dt: number, visible: boolean) {
     this.element.style.opacity = visible ? '0.94' : '0';
+    this.element.style.pointerEvents = visible ? 'auto' : 'none';
     this.timer -= dt;
     if (this.timer > 0 || !visible || !this.image.complete || !this.image.naturalWidth) return;
     this.timer = 0.1;

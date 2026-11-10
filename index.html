@@ -136,6 +136,16 @@
     @media (prefers-reduced-motion: reduce) {
       .toast, .start { animation: none; transition: none; }
     }
+    .card { max-height: 88dvh; overflow-y: auto; touch-action: pan-y; }
+    details { text-align: left; margin-top: 12px; } summary { cursor: pointer; }
+    dialog { color: var(--ink); border: 0; border-radius: 20px; width: min(440px, calc(100vw - 48px)); max-height: 80dvh; overflow: auto; touch-action: pan-y; }
+    dialog::backdrop { background: #0b1426aa; }
+    dialog input { box-sizing: border-box; width: 100%; padding: 12px; font: inherit; }
+    .destinations { display: grid; gap: 8px; margin-top: 12px; }
+    .destinations button { padding: 12px; border: 0; border-radius: 12px; background: #ffe5ed; text-align: left; }
+    .topleft, .topright, .zoom { z-index: 5; }
+    .topright { max-width: 72vw; } .pill { min-height: 30px; }
+    @media (pointer: coarse) { #controls { display: none; } }
   </style>
 </head>
 <body>
@@ -149,6 +159,8 @@
   </div>
 
   <div class="topright">
+    <button class="pill" id="mapBtn" type="button">세계지도 (N)</button>
+    <button class="pill" id="helpBtn" type="button">도움말</button>
     <button class="pill" id="viewBtn" type="button">3인칭 (T)</button>
     <button class="pill" id="muteBtn" type="button">소리 켜짐 (M)</button>
   </div>
@@ -164,8 +176,8 @@
   <div class="start" id="start">
     <div class="card">
       <h1>큐브 어스</h1>
-      <p>실제 지구를 걸어서 한 바퀴 도는 데 약 1시간. 뉴욕에서 출발해요.</p>
-      <ul class="keys">
+      <p>축소한 게임 속 지구에서 뉴욕을 출발해요. 평지에서 쉬지 않고 걸으면 한 바퀴 약 1시간입니다.</p>
+      <details open id="controls"><summary>PC 조작법</summary><ul class="keys">
         <li><b>이동</b><span>WASD · 방향키 · 왼쪽 스틱</span></li>
         <li><b>점프</b><span>스페이스 · 점프 버튼 (길게 누르면 더 높이)</span></li>
         <li><b>달리기</b><span>Shift 누르고 있기 · 달리기 버튼</span></li>
@@ -174,13 +186,13 @@
         <li><b>1인칭 · 3인칭</b><span>T</span></li>
         <li><b>멀어지기</b><span>마우스 휠 · −/= 키 (우주까지)</span></li>
         <li><b>소리 · 지도</b><span>M 소리 · N 세계지도</span></li>
-      </ul>
+      </ul></details><details><summary>모바일 조작법</summary><p>왼쪽 스틱: 이동 · 화면 드래그: 시점 회전<br>점프 길게: 높이 뛰기 / 수영 중 상승<br>잠수 길게: 하강 · 달리기: 켜기/끄기<br>상단 지도·시점·소리 버튼과 +/− 버튼을 사용하세요.</p></details><p class="tip">수평 1칸 ≈ 1.24km, 높이 1칸 = 100m로 지형 높이를 과장했습니다. 큐브 크기는 1m 기준입니다.</p>
       <p class="tip">에베레스트에 오르고, 마리아나 해구로 잠수해 보세요.</p>
-      <p class="tip" id="loading">지구를 불러오는 중…</p>
+      <p class="tip" id="loading" role="status" aria-live="polite">지구를 불러오는 중…</p>
       <button class="startbtn" id="startBtn" type="button" disabled>출발!</button>
     </div>
   </div>
 
-  <script type="module" src="/src/main.ts"></script>
+  <script type="module" src="/src/bootstrap.ts"></script>
 </body>
 </html>

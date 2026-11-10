@@ -17,6 +17,7 @@ export class Input {
   private stick = { x: 0, y: 0 };
   private look = { yaw: 0, pitch: 0 };
   private active = false;
+  private resetTouch = () => {};
   private lastPointerType = '';
   readonly isTouch: boolean;
 
@@ -24,13 +25,15 @@ export class Input {
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
     addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || document.querySelector('dialog[open]')) return;
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       if (e.repeat) return;
       this.keys.add(e.code);
       if (e.code === 'Space') this.jumpQueued = true;
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
-    addEventListener('blur', () => this.keys.clear());
+    addEventListener('blur', () => this.reset());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.reset(); });
 
     addEventListener('pointerdown', (e) => { this.lastPointerType = e.pointerType; }, true);
 
@@ -55,6 +58,16 @@ export class Input {
     document.addEventListener('pointerlockchange', () => { dragging = false; });
 
     if (this.isTouch) this.buildTouchUi(root);
+  }
+
+  reset() {
+    this.keys.clear();
+    this.resetTouch();
+    this.jumpQueued = this.jumpTouch = this.diveTouch = this.runTouch = false;
+    this.stick.x = this.stick.y = this.look.yaw = this.look.pitch = 0;
+    document.querySelector<HTMLElement>('.knob')?.style.setProperty('transform', 'translate(0,0)');
+    const run = document.querySelector('.runbtn');
+    run?.classList.remove('on'); run?.setAttribute('aria-pressed', 'false');
   }
 
   /** 시작 버튼이나 키 입력의 사용자 제스처 안에서 호출한다. */
@@ -114,6 +127,7 @@ export class Input {
       this.stick.y = -dy / R;
     };
     base.addEventListener('pointerdown', (e) => {
+      if (stickId !== -1) return;
       stickId = e.pointerId;
       base.setPointerCapture(e.pointerId);
       const r = base.getBoundingClientRect();
@@ -130,6 +144,7 @@ export class Input {
     };
     base.addEventListener('pointerup', endStick);
     base.addEventListener('pointercancel', endStick);
+    base.addEventListener('lostpointercapture', endStick);
 
     jump.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -140,6 +155,7 @@ export class Input {
     const endJump = () => { this.jumpTouch = false; };
     jump.addEventListener('pointerup', endJump);
     jump.addEventListener('pointercancel', endJump);
+    jump.addEventListener('lostpointercapture', endJump);
 
     dive.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -149,11 +165,13 @@ export class Input {
     const endDive = () => { this.diveTouch = false; };
     dive.addEventListener('pointerup', endDive);
     dive.addEventListener('pointercancel', endDive);
+    dive.addEventListener('lostpointercapture', endDive);
 
     // 화면 오른쪽을 드래그하면 카메라 회전
     let lookId = -1, lx = 0, ly = 0;
     this.canvas.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse') return;
+      if (e.pointerType === 'mouse' || lookId !== -1) return;
+      this.canvas.setPointerCapture(e.pointerId);
       lookId = e.pointerId; lx = e.clientX; ly = e.clientY;
     });
     this.canvas.addEventListener('pointermove', (e) => {
@@ -164,6 +182,8 @@ export class Input {
     const endLook = (e: PointerEvent) => { if (e.pointerId === lookId) lookId = -1; };
     this.canvas.addEventListener('pointerup', endLook);
     this.canvas.addEventListener('pointercancel', endLook);
+    this.canvas.addEventListener('lostpointercapture', endLook);
+    this.resetTouch = () => { stickId = lookId = -1; };
   }
 
   /** 점프 버튼이 새로 눌렸는가 (한 번 읽으면 소비됨) */

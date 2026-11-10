@@ -21,6 +21,7 @@ import { seaName } from './earth/places';
 import { dayOfYear, sunDirection } from './earth/sun';
 import { PlanetTerrain } from './earth/terrain';
 import { Vegetation } from './earth/vegetation';
+import { setupExplorer } from './explorer';
 import { Minimap } from './world/minimap';
 
 // ---------- 장면 ----------
@@ -39,6 +40,7 @@ scene.add(local);
 
 hud.setLoading('지구를 불러오는 중…');
 const [planet, countries] = await Promise.all([loadPlanet(), loadCountries()]);
+hud.setLoading('지형과 랜드마크를 준비하는 중…');
 const landmarks = new Landmarks(planet);
 scene.add(landmarks.group);
 
@@ -146,7 +148,7 @@ local.matrix.copy(view.matrix);
 local.updateMatrixWorld(true);
 camera.position.set(0, camAlt + 4, 8);
 terrain.prime(view.toWorld(0, camAlt + 4, 8, tmp));
-hud.setLoading(null);
+hud.setLoading('첫 화면을 준비하는 중…');
 
 // ---------- 시작 ----------
 let started = false;
@@ -377,7 +379,20 @@ function frame(now: number) {
   fpsCount++;
 }
 
-requestAnimationFrame(frame);
+setupExplorer(minimap, (lat, lon) => {
+  input.reset();
+  body.teleport(dirFromLatLon(lat, lon), 3);
+  camAlt = body.pos.length() - RADIUS;
+  camDist = 7.5;
+  view.z.copy(body.frame.z);
+  view.moveTo(body.pos);
+  terrain.prime(view.toWorld(0, camAlt + 4, 8, tmp));
+  placeT = 0;
+});
+requestAnimationFrame((now) => {
+  frame(now);
+  hud.setLoading(null);
+});
 
 // 검증/디버깅용 훅
 (window as unknown as Record<string, unknown>).__cube = {
