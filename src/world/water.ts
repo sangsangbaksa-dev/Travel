@@ -11,7 +11,7 @@ export class Water {
 
   constructor(level: number, private readonly fixed?: FixedSurface) {
     const mat = new THREE.MeshLambertMaterial({
-      color: fixed?.color ?? '#7fd3ea', emissive: '#2a6f86', emissiveIntensity: 0.18,
+      color: fixed?.color ?? '#4ea9bf', emissive: '#1d5a6c', emissiveIntensity: 0.18,
       transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide,
     });
     mat.onBeforeCompile = (sh) => {

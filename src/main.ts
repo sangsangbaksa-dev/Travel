@@ -34,7 +34,7 @@ renderer.setPixelRatio(pixelRatio);
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog('#dff1ff', 30, 92);
+scene.fog = new THREE.Fog('#d2e6f4', 30, 92);
 const sky = new Sky(scene);
 const clouds = new Clouds();
 scene.add(clouds.mesh);
@@ -133,9 +133,9 @@ let fpsCount = 0;
 let emaDt = 1 / 60;
 let prTimer = -5; // 시작 직후의 셰이더 컴파일 끊김은 무시한다
 
-const DUST = '#f1e8cc';
-const SPLASH = '#dff6ff';
-const DEEP_WATER_COLOR = new THREE.Color('#244858');
+const DUST = '#e8d9b0';
+const SPLASH = '#d4eef4';
+const DEEP_WATER_COLOR = new THREE.Color('#1c4258');
 
 /** 지금 서 있는 곳의 이름 */
 function placeAt(x: number, z: number, y: number, inWater: boolean): string {
@@ -328,10 +328,10 @@ function frame(now: number) {
   fog.far = underwaterView ? 38 : inCave ? 68 : 92;
   if (underwaterView) {
     const depth = THREE.MathUtils.clamp((cameraWater - camera.position.y) / 20, 0, 1);
-    fog.color.set('#5ea6b1').lerp(DEEP_WATER_COLOR, depth);
+    fog.color.set('#3e8a96').lerp(DEEP_WATER_COLOR, depth);
     fog.far = 38 - depth * 10;
   }
-  else if (inCave) fog.color.set('#55566a');
+  else if (inCave) fog.color.set('#5a564f');
   clouds.mesh.visible = !inCave;
   clouds.update(camera, time, skyState);
   const brightness = Math.min(1, skyState.sunIntensity / 1.25 + skyState.moonIntensity * 0.3);

@@ -72,7 +72,7 @@ function caveRoof(terrain: Terrain): THREE.Mesh {
   const layer = row * (length + 1);
   const vertices = new Float32Array(layer * 2 * 3);
   const colors = new Float32Array(vertices.length);
-  const underside = new THREE.Color('#655f57'), outside = new THREE.Color('#8a8173');
+  const underside = new THREE.Color('#5a554e'), outside = new THREE.Color('#8a8173');
   const tint = new THREE.Color();
   const indices: number[] = [];
   for (let j = 0; j <= length; j++) {
@@ -119,7 +119,7 @@ export class Passages {
   readonly group = new THREE.Group();
   constructor(terrain: Terrain) {
     const stepGeo = new THREE.BoxGeometry(4.6, .18, 1.45);
-    const steps = new THREE.InstancedMesh(stepGeo, new THREE.MeshLambertMaterial({ color: '#d5ccba' }), 134);
+    const steps = new THREE.InstancedMesh(stepGeo, new THREE.MeshLambertMaterial({ color: '#c8bea8' }), 134);
     const dummy = new THREE.Object3D();
     for (let i = 0; i < 134; i++) {
       const z = -0.75 - i * 1.49;
@@ -130,7 +130,7 @@ export class Passages {
     // 구름 위 전망대: 계단의 끝과 같은 지면에 놓인다.
     const summitY = terrain.height(SKY_X, -202);
     const columnGeo = new THREE.CylinderGeometry(.34, .4, 4, 10);
-    const marble = new THREE.MeshLambertMaterial({ color: '#e8e1d0' });
+    const marble = new THREE.MeshLambertMaterial({ color: '#dcd4c2' });
     for (const dx of [-5, 5]) for (const dz of [-5, 5]) {
       const column = new THREE.Mesh(columnGeo, marble);
       column.position.set(SKY_X + dx, summitY + 2, -202 + dz);

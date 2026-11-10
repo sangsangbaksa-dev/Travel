@@ -134,7 +134,7 @@ export class Sky {
     scene.add(this.aurora, this.rainbow);
     scene.add(this.dome, this.sunGlow, this.sunCore, this.moonGlow, this.moon, this.stars);
     scene.add(this.sunLight, this.moonLight, this.hemi);
-    if (!scene.fog) scene.fog = new THREE.Fog('#dff1ff', 30, 92);
+    if (!scene.fog) scene.fog = new THREE.Fog('#d2e6f4', 30, 92);
   }
 
   update(camera: THREE.Camera, s: SkyState, time = 0) {
